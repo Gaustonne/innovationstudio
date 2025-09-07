@@ -1,9 +1,10 @@
-import 'package:english_words/english_words.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'screens/meal_plan_screen.dart';
+import 'screens/add_ingredient_screen.dart';
+import 'screens/ingredient_overview_screen.dart';
 
 void main() {
-  runApp(MyApp());
+  runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
@@ -11,198 +12,96 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (context) => MyAppState(),
-      child: MaterialApp(
-        title: 'Namer App',
-        theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(seedColor: Colors.green),
-        ),
-        home: MyHomePage(),
+    return MaterialApp(
+      title: 'Meal Planner',
+      theme: ThemeData(
+        primarySwatch: Colors.teal,
+        useMaterial3: true,
       ),
+      home: const HomeScreen(),
     );
   }
 }
 
-class MyAppState extends ChangeNotifier {
-  var current = WordPair.random();
+class HomeScreen extends StatefulWidget {
+  const HomeScreen({super.key});
 
-  void getNext() {
-    current = WordPair.random();
-    notifyListeners();
-  }
-
-  var favorites = <WordPair>{};
-
-  void toggleFavorite() {
-    if (favorites.contains(current)) {
-      favorites.remove(current);
-    } else {
-      favorites.add(current);
-    }
-    notifyListeners();
-  }
-}
-
-// ...
-
-class MyHomePage extends StatefulWidget {
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  var selectedIndex = 0;
+class _HomeScreenState extends State<HomeScreen> {
+  // Shared ingredient list
+  final List<Map<String, String>> _ingredients = [
+    {'name': 'Lobster', 'amount': '350 grams', 'expiry': '2025-12-02'},
+    {'name': 'Spinach', 'amount': '200 grams', 'expiry': '2025-09-15'},
+    {'name': 'Rice', 'amount': '1 kg', 'expiry': '2025-10-01'},
+  ];
+
+  // Lifted weekly meal plan
+  final Map<String, Map<String, List<Map<String, String>>>> _weeklyMealPlan = {
+    'Monday': {'Breakfast': [], 'Lunch': [], 'Dinner': []},
+    'Tuesday': {'Breakfast': [], 'Lunch': [], 'Dinner': []},
+    'Wednesday': {'Breakfast': [], 'Lunch': [], 'Dinner': []},
+    'Thursday': {'Breakfast': [], 'Lunch': [], 'Dinner': []},
+    'Friday': {'Breakfast': [], 'Lunch': [], 'Dinner': []},
+    'Saturday': {'Breakfast': [], 'Lunch': [], 'Dinner': []},
+    'Sunday': {'Breakfast': [], 'Lunch': [], 'Dinner': []},
+  };
 
   @override
   Widget build(BuildContext context) {
-    Widget page;
-    switch (selectedIndex) {
-      case 0:
-        page = GeneratorPage();
-        break;
-      case 1:
-        page = FavoritesPage();
-        break;
-      default:
-        throw UnimplementedError('no widget for $selectedIndex');
-    }
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return Scaffold(
-          body: Row(
-            children: [
-              SafeArea(
-                child: NavigationRail(
-                  extended: constraints.maxWidth >= 600,
-                  destinations: [
-                    NavigationRailDestination(
-                      icon: Icon(Icons.home),
-                      label: Text('Home'),
+    return Scaffold(
+      appBar: AppBar(title: const Text('Meal Planner Home')),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            ElevatedButton(
+              onPressed: () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        IngredientOverviewScreen(ingredients: _ingredients),
+                  ),
+                );
+                setState(() {}); // Refresh after returning
+              },
+              child: const Text('Ingredient Overview'),
+            ),
+            const SizedBox(height: 12),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => MealPlanScreen(
+                      ingredients: _ingredients,
+                      weeklyMealPlan: _weeklyMealPlan, // pass shared meal plan
                     ),
-                    NavigationRailDestination(
-                      icon: Icon(Icons.favorite),
-                      label: Text('Favorites'),
-                    ),
-                  ],
-                  selectedIndex: selectedIndex,
-                  onDestinationSelected: (value) {
-                    setState(() {
-                      selectedIndex = value;
-                    });
-                  },
-                ),
-              ),
-              Expanded(
-                child: Container(
-                  color: Theme.of(context).colorScheme.primaryContainer,
-                  child: page,
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-}
-
-class GeneratorPage extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    var appState = context.watch<MyAppState>();
-    var pair = appState.current;
-
-    IconData icon;
-    if (appState.favorites.contains(pair)) {
-      icon = Icons.favorite;
-    } else {
-      icon = Icons.favorite_border;
-    }
-
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          BigCard(pair: pair),
-          SizedBox(height: 10),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ElevatedButton.icon(
-                onPressed: () {
-                  appState.toggleFavorite();
-                },
-                icon: Icon(icon),
-                label: Text('Like'),
-              ),
-              SizedBox(width: 10),
-              ElevatedButton(
-                onPressed: () {
-                  appState.getNext();
-                },
-                child: Text('Next'),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class BigCard extends StatelessWidget {
-  const BigCard({super.key, required this.pair});
-
-  final WordPair pair;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final style = theme.textTheme.displayMedium!.copyWith(
-      color: theme.colorScheme.onPrimary,
-    );
-
-    return Card(
-      color: theme.colorScheme.primary,
-      elevation: 2,
-      child: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: Text(
-          pair.asPascalCase,
-          style: style,
-          semanticsLabel: "${pair.first} ${pair.second}",
+                  ),
+                );
+              },
+              child: const Text('View Meal Plan'),
+            ),
+            const SizedBox(height: 12),
+            ElevatedButton(
+              onPressed: () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        IngredientListScreen(ingredients: _ingredients),
+                  ),
+                );
+                setState(() {}); // Refresh after adding
+              },
+              child: const Text('Add Ingredient'),
+            ),
+          ],
         ),
       ),
-    );
-  }
-}
-
-class FavoritesPage extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    var appState = context.watch<MyAppState>();
-
-    if (appState.favorites.isEmpty) {
-      return Center(child: Text('No favorites yet.'));
-    }
-
-    return ListView(
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(20),
-          child: Text(
-            'You have '
-            '${appState.favorites.length} favorites:',
-          ),
-        ),
-        for (var pair in appState.favorites)
-          ListTile(
-            leading: Icon(Icons.favorite),
-            title: Text(pair.asLowerCase),
-          ),
-      ],
     );
   }
 }
