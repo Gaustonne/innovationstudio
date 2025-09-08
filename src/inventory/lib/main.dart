@@ -63,19 +63,19 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
       name: 'Eggs',
       quantity: 12,
       weightKg: 0.72,
-      expiry: DateTime.now().add(const Duration(days: 7)),
+      expiry: DateTime.now().add(const Duration(days: 0)),
     ),
     Ingredient(
       name: 'Milk',
       quantity: 1,
       weightKg: 1.0,
-      expiry: DateTime.now().add(const Duration(days: 5)),
+      expiry: DateTime.now().subtract(const Duration(days: 1)),
     ),
     Ingredient(
       name: 'Butter',
       quantity: 1,
       weightKg: 0.25,
-      expiry: DateTime.now().add(const Duration(days: 60)),
+      expiry: DateTime.now().add(const Duration(days: 7)),
     ),
   ];
 
@@ -84,6 +84,37 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
     final m = d.month.toString().padLeft(2, '0');
     final day = d.day.toString().padLeft(2, '0');
     return '$y-$m-$day';
+  }
+
+  String _relativeExpiry(DateTime d) {
+    final now = DateTime.now();
+    // Compare only date portion to avoid confusing partial days
+    final today = DateTime(now.year, now.month, now.day);
+    final target = DateTime(d.year, d.month, d.day);
+    final diff = target.difference(today).inDays;
+
+    if (diff < 0) {
+      final daysAgo = -diff;
+      if (daysAgo == 0) return 'expired today';
+      return 'expired $daysAgo day${daysAgo > 1 ? 's' : ''} ago';
+    } else if (diff == 0) {
+      return 'expires today';
+    } else if (diff == 1) {
+      return 'in 1 day';
+    } else {
+      return 'in $diff days';
+    }
+  }
+
+  Color _expiryColor(DateTime d) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final target = DateTime(d.year, d.month, d.day);
+    final diff = target.difference(today).inDays;
+
+    if (diff < 0) return Colors.red; // already expired
+    if (diff <= 2) return Colors.orange; // urgent
+    return Colors.green; // OK
   }
 
   List<Ingredient> _computeDisplayedItems() {
@@ -98,8 +129,14 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
           .toList();
     }
 
+    // If sorting by expiry, sort ascending by expiry date (nearest first).
+    // Otherwise sort alphabetically by name.
     if (_sortByExpiry) {
       items.sort((a, b) => a.expiry.compareTo(b.expiry));
+    } else {
+      items.sort(
+        (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+      );
     }
 
     return items;
@@ -109,15 +146,29 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
   Widget build(BuildContext context) {
     final displayed = _computeDisplayedItems();
 
+    final now = DateTime.now();
+    final next7 = now.add(const Duration(days: 7));
+    final expiringCount = _dummyItems
+        .where((i) => i.expiry.isAfter(now) && i.expiry.isBefore(next7))
+        .length;
+
+    final titleStyle = Theme.of(context).textTheme.displayMedium!.copyWith(
+      color: Theme.of(context).colorScheme.onPrimary,
+      fontSize: 24,
+    );
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Kitchen Inventory'),
+        title: Text('Kitchen Inventory', style: titleStyle),
         backgroundColor: Theme.of(context).colorScheme.primary,
         actions: [
           IconButton(
-            tooltip: _sortByExpiry ? 'Unsort' : 'Sort by nearest expiry',
-            icon: Icon(_sortByExpiry ? Icons.sort_by_alpha : Icons.schedule),
+            tooltip: _sortByExpiry
+                ? 'Sort alphabetically'
+                : 'Sort by nearest expiry',
+            icon: Icon(_sortByExpiry ? Icons.schedule : Icons.sort_by_alpha),
             onPressed: () => setState(() => _sortByExpiry = !_sortByExpiry),
+            color: Theme.of(context).colorScheme.onPrimary,
           ),
         ],
       ),
@@ -128,7 +179,7 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
             Row(
               children: [
                 FilterChip(
-                  label: const Text('Expiring in 7 days'),
+                  label: Text('Expiring within 7 days ($expiringCount)'),
                   selected: _filterNext7Days,
                   onSelected: (v) => setState(() => _filterNext7Days = v),
                 ),
@@ -180,7 +231,23 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
                                   children: [
                                     Text('Quantity: ${item.quantity}'),
                                     Text('Weight: ${item.weightKg} kg'),
-                                    Text('Expiry: ${_formatDate(item.expiry)}'),
+                                    Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Expiry: ${_formatDate(item.expiry)}',
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          _relativeExpiry(item.expiry),
+                                          style: TextStyle(
+                                            color: _expiryColor(item.expiry),
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ],
                                 ),
                               ],
