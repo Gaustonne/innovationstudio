@@ -8,6 +8,17 @@ class RecipeRecommenderPage extends StatefulWidget {
 }
 
 class _RecipeRecommenderPageState extends State<RecipeRecommenderPage> {
+  Future<Map<String, dynamic>?> fetchRecipeDetails(String idMeal) async {
+    final url = Uri.parse('https://www.themealdb.com/api/json/v1/1/lookup.php?i=$idMeal');
+    final response = await http.get(url);
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      if (data['meals'] != null && data['meals'].isNotEmpty) {
+        return data['meals'][0];
+      }
+    }
+    return null;
+  }
   List<dynamic> savedRecipes = [];
   final List<String> ingredients = [
     'Tomato',
@@ -115,6 +126,24 @@ class _RecipeRecommenderPageState extends State<RecipeRecommenderPage> {
                         });
                       },
                     ),
+                    onTap: () async {
+                      final details = await fetchRecipeDetails(recipe['idMeal']);
+                      if (details != null) {
+                        showDialog(
+                          context: context,
+                          builder: (context) => AlertDialog(
+                            title: Text(details['strMeal'] ?? ''),
+                            content: Text('Category: ${details['strCategory'] ?? 'N/A'}'),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(context),
+                                child: Text('Close'),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+                    },
                   )),
             SizedBox(height: 32),
             if (savedRecipes.isNotEmpty)
@@ -128,6 +157,65 @@ class _RecipeRecommenderPageState extends State<RecipeRecommenderPage> {
                               ? Image.network(recipe['strMealThumb'], width: 50, height: 50, fit: BoxFit.cover)
                               : null,
                           title: Text(recipe['strMeal'] ?? ''),
+                          onTap: () async {
+                            final details = await fetchRecipeDetails(recipe['idMeal']);
+                            if (details != null) {
+                              // Collect ingredients and measures
+                              List<String> ingredients = [];
+                              for (int i = 1; i <= 20; i++) {
+                                final ingredient = details['strIngredient$i'];
+                                final measure = details['strMeasure$i'];
+                                if (ingredient != null && ingredient.isNotEmpty) {
+                                  ingredients.add('$ingredient: ${measure ?? ''}');
+                                }
+                              }
+                              showDialog(
+                                context: context,
+                                builder: (context) => AlertDialog(
+                                  title: Text(details['strMeal'] ?? ''),
+                                  content: SingleChildScrollView(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        if (details['strInstructions'] != null)
+                                          Text('Instructions:\n${details['strInstructions']}'),
+                                        SizedBox(height: 12),
+                                        Text('Ingredients & Measures:'),
+                                        ...ingredients.map((e) => Text(e)),
+                                        SizedBox(height: 12),
+                                        if (details['strYoutube'] != null && details['strYoutube'].isNotEmpty)
+                                          InkWell(
+                                            child: Text('YouTube Video', style: TextStyle(color: Colors.blue)),
+                                            onTap: () {
+                                              Navigator.pop(context);
+                                              showDialog(
+                                                context: context,
+                                                builder: (context) => AlertDialog(
+                                                  title: Text('YouTube Link'),
+                                                  content: SelectableText(details['strYoutube']),
+                                                  actions: [
+                                                    TextButton(
+                                                      onPressed: () => Navigator.pop(context),
+                                                      child: Text('Close'),
+                                                    ),
+                                                  ],
+                                                ),
+                                              );
+                                            },
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(context),
+                                      child: Text('Close'),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }
+                          },
                         ),
                       )),
                 ],
