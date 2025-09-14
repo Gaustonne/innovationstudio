@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'add_ingredient_screen.dart';
+import '../models/ingredient.dart';
 
 class IngredientOverviewScreen extends StatefulWidget {
-  final List<Map<String, String>> ingredients; // shared ingredient list
+  final List<Ingredient> ingredients;
 
   const IngredientOverviewScreen({super.key, required this.ingredients});
 
@@ -13,6 +15,7 @@ class IngredientOverviewScreen extends StatefulWidget {
 
 class _IngredientOverviewScreenState extends State<IngredientOverviewScreen> {
   bool _isEditing = false;
+  final DateFormat _dateFormat = DateFormat('dd MMM yyyy');
 
   void _deleteIngredient(int index) {
     setState(() {
@@ -24,10 +27,10 @@ class _IngredientOverviewScreenState extends State<IngredientOverviewScreen> {
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => IngredientListScreen(ingredients: widget.ingredients),
+        builder: (_) => AddIngredientScreen(ingredients: widget.ingredients),
       ),
     );
-    setState(() {}); // Refresh UI after returning
+    setState(() {});
   }
 
   @override
@@ -56,6 +59,7 @@ class _IngredientOverviewScreenState extends State<IngredientOverviewScreen> {
                 itemCount: widget.ingredients.length,
                 itemBuilder: (context, index) {
                   final ingredient = widget.ingredients[index];
+
                   return Card(
                     margin: const EdgeInsets.symmetric(vertical: 4),
                     child: Padding(
@@ -71,29 +75,58 @@ class _IngredientOverviewScreenState extends State<IngredientOverviewScreen> {
                                   child: Column(
                                     children: [
                                       TextField(
-                                        decoration: const InputDecoration(labelText: 'Name'),
+                                        decoration:
+                                            const InputDecoration(labelText: 'Name'),
                                         controller: TextEditingController(
-                                          text: ingredient['name'],
-                                        ),
-                                        onChanged: (val) =>
-                                            widget.ingredients[index]['name'] = val,
+                                            text: ingredient.name),
+                                        onChanged: (val) {
+                                          setState(() {
+                                            ingredient.name = val;
+                                          });
+                                        },
                                       ),
                                       TextField(
-                                        decoration: const InputDecoration(labelText: 'Amount'),
+                                        decoration:
+                                            const InputDecoration(labelText: 'Weight (kg)'),
                                         controller: TextEditingController(
-                                          text: ingredient['amount'],
-                                        ),
-                                        onChanged: (val) =>
-                                            widget.ingredients[index]['amount'] = val,
+                                            text: ingredient.weightKg.toString()),
+                                        keyboardType: TextInputType.number,
+                                        onChanged: (val) {
+                                          setState(() {
+                                            ingredient.weightKg = double.tryParse(val) ?? 0.0;
+                                          });
+                                        },
+                                      ),
+                                      TextField(
+                                        decoration: const InputDecoration(labelText: 'Quantity'),
+                                        controller: TextEditingController(
+                                            text: ingredient.quantity.toString()),
+                                        keyboardType: TextInputType.number,
+                                        onChanged: (val) {
+                                          setState(() {
+                                            ingredient.quantity = int.tryParse(val) ?? 1;
+                                          });
+                                        },
                                       ),
                                       TextField(
                                         decoration: const InputDecoration(
-                                            labelText: 'Expiry (YYYY-MM-DD)'),
+                                            labelText: 'Expiry'),
                                         controller: TextEditingController(
-                                          text: ingredient['expiry'],
-                                        ),
-                                        onChanged: (val) =>
-                                            widget.ingredients[index]['expiry'] = val,
+                                            text: _dateFormat.format(ingredient.expiry)),
+                                        onTap: () async {
+                                          final picked = await showDatePicker(
+                                            context: context,
+                                            initialDate: ingredient.expiry,
+                                            firstDate: DateTime.now(),
+                                            lastDate: DateTime(DateTime.now().year + 2),
+                                          );
+                                          if (picked != null) {
+                                            setState(() {
+                                              ingredient.expiry = picked;
+                                            });
+                                          }
+                                        },
+                                        readOnly: true,
                                       ),
                                     ],
                                   ),
@@ -101,12 +134,12 @@ class _IngredientOverviewScreenState extends State<IngredientOverviewScreen> {
                               ],
                             )
                           : ListTile(
-                              title: Text(ingredient['name'] ?? 'Unknown'),
+                              title: Text(ingredient.name),
                               subtitle: Text(
-                                  'Amount: ${ingredient['amount'] ?? 'N/A'}, Expiry: ${ingredient['expiry'] ?? 'N/A'}'),
+                                  'Weight: ${ingredient.weightKg} kg, Qty: ${ingredient.quantity}, Expiry: ${_dateFormat.format(ingredient.expiry)}'),
                               onTap: () {
                                 if (!_isEditing) {
-                                  Navigator.pop(context, ingredient); // Return picked ingredient
+                                  Navigator.pop(context, ingredient);
                                 }
                               },
                             ),

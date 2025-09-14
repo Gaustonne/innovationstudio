@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'ingredient_overview_screen.dart';
+import '../models/ingredient.dart';
 
 class MealPlanScreen extends StatefulWidget {
-  final List<Map<String, String>> ingredients; // shared ingredient list
-  final Map<String, Map<String, List<Map<String, String>>>> weeklyMealPlan;
+  final List<Ingredient> ingredients;
+  final Map<String, Map<String, List<Ingredient>>> weeklyMealPlan;
 
   const MealPlanScreen({
     super.key,
@@ -16,22 +18,23 @@ class MealPlanScreen extends StatefulWidget {
 }
 
 class _MealPlanScreenState extends State<MealPlanScreen> {
-  late Map<String, Map<String, List<Map<String, String>>>> _weeklyMealPlan;
+  late Map<String, Map<String, List<Ingredient>>> _weeklyMealPlan;
+  final DateFormat _dateFormat = DateFormat('dd MMM yyyy');
 
   @override
   void initState() {
     super.initState();
-    _weeklyMealPlan = widget.weeklyMealPlan; // use shared instance
+    _weeklyMealPlan = widget.weeklyMealPlan;
   }
 
-  void _addIngredient(String day, String meal, Map<String, String> ingredient) {
+  void _addIngredient(String day, String meal, Ingredient ingredient) {
     setState(() {
       _weeklyMealPlan[day]![meal]!.add(ingredient);
     });
   }
 
   Future<void> _pickIngredient(String day, String meal) async {
-    final pickedIngredient = await Navigator.push(
+    final pickedIngredient = await Navigator.push<Ingredient>(
       context,
       MaterialPageRoute(
         builder: (_) =>
@@ -39,7 +42,7 @@ class _MealPlanScreenState extends State<MealPlanScreen> {
       ),
     );
 
-    if (pickedIngredient != null && pickedIngredient is Map<String, String>) {
+    if (pickedIngredient != null) {
       _addIngredient(day, meal, pickedIngredient);
     }
   }
@@ -74,7 +77,7 @@ class _MealPlanScreenState extends State<MealPlanScreen> {
                       Text(meal,
                           style: const TextStyle(fontWeight: FontWeight.bold)),
                       ...ingredients.map((ing) => Text(
-                          "${ing['name']} - ${ing['amount']} (${ing['expiry']})")),
+                          "${ing.name} - ${ing.weightKg} kg, Qty: ${ing.quantity} (Expiry: ${_dateFormat.format(ing.expiry)})")),
                       TextButton.icon(
                         icon: const Icon(Icons.add),
                         label: const Text("Add item"),

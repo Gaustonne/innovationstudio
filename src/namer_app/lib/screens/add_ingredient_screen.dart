@@ -1,18 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import '../models/ingredient.dart';
 
-class IngredientListScreen extends StatefulWidget {
-  final List<Map<String, String>> ingredients; // shared list
+class AddIngredientScreen extends StatefulWidget {
+  final List<Ingredient> ingredients;
 
-  const IngredientListScreen({super.key, required this.ingredients});
+  const AddIngredientScreen({super.key, required this.ingredients});
 
   @override
-  State<IngredientListScreen> createState() => _IngredientListScreenState();
+  State<AddIngredientScreen> createState() => _AddIngredientScreenState();
 }
 
-class _IngredientListScreenState extends State<IngredientListScreen> {
+class _AddIngredientScreenState extends State<AddIngredientScreen> {
   final TextEditingController _nameController = TextEditingController();
-  final TextEditingController _amountController = TextEditingController();
+  final TextEditingController _weightController = TextEditingController();
+  final TextEditingController _quantityController = TextEditingController();
   DateTime? _selectedDate;
+  final DateFormat _dateFormat = DateFormat('dd MMM yyyy');
 
   Future<void> _pickExpiryDate() async {
     final now = DateTime.now();
@@ -32,18 +36,22 @@ class _IngredientListScreenState extends State<IngredientListScreen> {
 
   void _saveIngredient() {
     final name = _nameController.text.trim();
-    final amount = _amountController.text.trim();
+    final weightText = _weightController.text.trim();
+    final quantityText = _quantityController.text.trim();
 
-    if (name.isNotEmpty && amount.isNotEmpty && _selectedDate != null) {
-      final newIngredient = {
-        'name': name,
-        'amount': amount,
-        'expiry': _selectedDate!.toIso8601String().split('T').first,
-      };
+    if (name.isNotEmpty &&
+        weightText.isNotEmpty &&
+        quantityText.isNotEmpty &&
+        _selectedDate != null) {
+      final newIngredient = Ingredient(
+        name: name,
+        weightKg: double.tryParse(weightText) ?? 0.0,
+        quantity: int.tryParse(quantityText) ?? 1,
+        expiry: _selectedDate!,
+      );
 
-      widget.ingredients.add(newIngredient); // Add to shared list
-
-      Navigator.pop(context, newIngredient); // Return new ingredient
+      widget.ingredients.add(newIngredient);
+      Navigator.pop(context, newIngredient);
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please fill all fields and pick a date')),
@@ -65,8 +73,15 @@ class _IngredientListScreenState extends State<IngredientListScreen> {
             ),
             const SizedBox(height: 12),
             TextField(
-              controller: _amountController,
-              decoration: const InputDecoration(labelText: 'Amount (e.g., 1 cup)'),
+              controller: _weightController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: 'Weight (kg)'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _quantityController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: 'Quantity'),
             ),
             const SizedBox(height: 12),
             Row(
@@ -75,7 +90,7 @@ class _IngredientListScreenState extends State<IngredientListScreen> {
                   child: Text(
                     _selectedDate == null
                         ? 'No date chosen'
-                        : 'Expiry: ${_selectedDate!.toIso8601String().split('T').first}',
+                        : 'Expiry: ${_dateFormat.format(_selectedDate!)}',
                   ),
                 ),
                 TextButton(

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'screens/meal_plan_screen.dart';
 import 'screens/add_ingredient_screen.dart';
 import 'screens/ingredient_overview_screen.dart';
+import 'models/ingredient.dart';
 
 void main() {
   runApp(const MyApp());
@@ -31,15 +32,30 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  // Shared ingredient list
-  final List<Map<String, String>> _ingredients = [
-    {'name': 'Lobster', 'amount': '350 grams', 'expiry': '2025-12-02'},
-    {'name': 'Spinach', 'amount': '200 grams', 'expiry': '2025-09-15'},
-    {'name': 'Rice', 'amount': '1 kg', 'expiry': '2025-10-01'},
+  // Shared ingredient list (dummy data)
+  final List<Ingredient> _ingredients = [
+    Ingredient(
+      name: 'Lobster',
+      weightKg: 1,
+      quantity: 2,
+      expiry: DateTime.parse('2025-12-02'),
+    ),
+    Ingredient(
+      name: 'Spinach',
+      weightKg: 0.5,
+      quantity: 1,
+      expiry: DateTime.parse('2025-09-15'),
+    ),
+    Ingredient(
+      name: 'Rice',
+      weightKg: 1.0,
+      quantity: 3,
+      expiry: DateTime.parse('2025-10-01'),
+    ),
   ];
 
-  // Lifted weekly meal plan
-  final Map<String, Map<String, List<Map<String, String>>>> _weeklyMealPlan = {
+  // Shared weekly meal plan (using Ingredient objects)
+  final Map<String, Map<String, List<Ingredient>>> _weeklyMealPlan = {
     'Monday': {'Breakfast': [], 'Lunch': [], 'Dinner': []},
     'Tuesday': {'Breakfast': [], 'Lunch': [], 'Dinner': []},
     'Wednesday': {'Breakfast': [], 'Lunch': [], 'Dinner': []},
@@ -78,7 +94,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   MaterialPageRoute(
                     builder: (_) => MealPlanScreen(
                       ingredients: _ingredients,
-                      weeklyMealPlan: _weeklyMealPlan, // pass shared meal plan
+                      weeklyMealPlan: _weeklyMealPlan,
                     ),
                   ),
                 );
@@ -92,7 +108,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   context,
                   MaterialPageRoute(
                     builder: (_) =>
-                        IngredientListScreen(ingredients: _ingredients),
+                        AddIngredientScreen(ingredients: _ingredients),
                   ),
                 );
                 setState(() {}); // Refresh after adding
