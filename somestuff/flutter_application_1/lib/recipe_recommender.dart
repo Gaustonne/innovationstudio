@@ -8,6 +8,7 @@ class RecipeRecommenderPage extends StatefulWidget {
 }
 
 class _RecipeRecommenderPageState extends State<RecipeRecommenderPage> {
+  String selectedLetter = 'A';
   Future<Map<String, dynamic>?> fetchRecipeDetails(String idMeal) async {
     final url = Uri.parse('https://www.themealdb.com/api/json/v1/1/lookup.php?i=$idMeal');
     final response = await http.get(url);
@@ -20,17 +21,31 @@ class _RecipeRecommenderPageState extends State<RecipeRecommenderPage> {
     return null;
   }
   List<dynamic> savedRecipes = [];
-  final List<String> ingredients = [
-    'Tomato',
-    'Cheese',
-    'Chicken',
-    'Lettuce',
-    'Egg',
-    'Bread',
-    'Onion',
-    'Beef',
-    'Potato',
-  ];
+  List<String> ingredients = [];
+  bool isLoadingIngredients = true;
+
+  @override
+  void initState() {
+    super.initState();
+    fetchAllIngredients();
+  }
+
+  Future<void> fetchAllIngredients() async {
+    final url = Uri.parse('https://www.themealdb.com/api/json/v1/1/list.php?i=list');
+    final response = await http.get(url);
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      setState(() {
+        ingredients = (data['meals'] as List).map((e) => e['strIngredient']).whereType<String>().toList();
+        isLoadingIngredients = false;
+      });
+    } else {
+      setState(() {
+        ingredients = [];
+        isLoadingIngredients = false;
+      });
+    }
+  }
 
   Set<String> selectedIngredients = {};
   List<dynamic> recipes = [];
@@ -46,21 +61,63 @@ class _RecipeRecommenderPageState extends State<RecipeRecommenderPage> {
     setState(() {
       isLoading = true;
     });
-    final ingredient = selectedIngredients.first;
-    final url = Uri.parse('https://www.themealdb.com/api/json/v1/1/filter.php?i=$ingredient');
-    final response = await http.get(url);
-    if (response.statusCode == 200) {
-      final data = json.decode(response.body);
-      setState(() {
-        recipes = data['meals'] ?? [];
-        isLoading = false;
-      });
-    } else {
-      setState(() {
-        recipes = [];
-        isLoading = false;
-      });
+
+    // Fetch recipes for each selected ingredient
+    Set<String> allRecipeIds = {};
+    Map<String, dynamic> recipeDetailsMap = {};
+    for (final ingredient in selectedIngredients) {
+      final url = Uri.parse('https://www.themealdb.com/api/json/v1/1/filter.php?i=$ingredient');
+      final response = await http.get(url);
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['meals'] != null) {
+          for (var meal in data['meals']) {
+            allRecipeIds.add(meal['idMeal']);
+            recipeDetailsMap[meal['idMeal']] = meal;
+          }
+        }
+      }
     }
+
+    // Fetch full details for each recipe
+    List<Map<String, dynamic>> fullRecipes = [];
+    for (final id in allRecipeIds) {
+      final details = await fetchRecipeDetails(id);
+      if (details != null) {
+        fullRecipes.add(details);
+      }
+    }
+
+    // Score recipes by number of missing ingredients
+    List<Map<String, dynamic>> scoredRecipes = [];
+    for (final recipe in fullRecipes) {
+      List<String> recipeIngredients = [];
+      for (int i = 1; i <= 20; i++) {
+        final ingredient = recipe['strIngredient$i'];
+        if (ingredient != null && ingredient.isNotEmpty) {
+          recipeIngredients.add(ingredient.trim().toLowerCase());
+        }
+      }
+      final selectedLower = selectedIngredients.map((e) => e.trim().toLowerCase()).toSet();
+      final matched = recipeIngredients.where((i) => selectedLower.contains(i)).toList();
+      final missing = recipeIngredients.where((i) => !selectedLower.contains(i)).toList();
+      recipe['matchedCount'] = matched.length;
+      recipe['missingIngredients'] = missing;
+      recipe['totalIngredients'] = recipeIngredients.length;
+      scoredRecipes.add(recipe);
+    }
+
+    // Sort by fewest missing ingredients (most matches first)
+    scoredRecipes.sort((a, b) {
+      int missingA = (a['missingIngredients'] as List).length;
+      int missingB = (b['missingIngredients'] as List).length;
+      return missingA.compareTo(missingB);
+    });
+
+    setState(() {
+      recipes = scoredRecipes;
+      isLoading = false;
+    });
   }
 
   @override
@@ -73,26 +130,56 @@ class _RecipeRecommenderPageState extends State<RecipeRecommenderPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('Select Ingredients:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            Wrap(
-              spacing: 8.0,
-              children: ingredients.map((ingredient) {
-                final isSelected = selectedIngredients.contains(ingredient);
-                return FilterChip(
-                  label: Text(ingredient),
-                  selected: isSelected,
-                  onSelected: (selected) {
-                    setState(() {
-                      if (selected) {
-                        selectedIngredients.add(ingredient);
-                      } else {
-                        selectedIngredients.remove(ingredient);
-                      }
-                    });
-                    fetchRecipes();
-                  },
-                );
-              }).toList(),
-            ),
+            if (isLoadingIngredients)
+              Center(child: CircularProgressIndicator()),
+            if (!isLoadingIngredients)
+              SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(height: 8),
+                    Text('Filter by first letter:'),
+                    Wrap(
+                      spacing: 4.0,
+                      children: List.generate(26, (i) {
+                        String letter = String.fromCharCode(65 + i);
+                        return ChoiceChip(
+                          label: Text(letter),
+                          selected: selectedLetter == letter,
+                          onSelected: (selected) {
+                            setState(() {
+                              selectedLetter = letter;
+                            });
+                          },
+                        );
+                      }),
+                    ),
+                    SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8.0,
+                      children: ingredients
+                          .where((ingredient) => ingredient.toUpperCase().startsWith(selectedLetter))
+                          .map((ingredient) {
+                        final isSelected = selectedIngredients.contains(ingredient);
+                        return FilterChip(
+                          label: Text(ingredient),
+                          selected: isSelected,
+                          onSelected: (selected) {
+                            setState(() {
+                              if (selected) {
+                                selectedIngredients.add(ingredient);
+                              } else {
+                                selectedIngredients.remove(ingredient);
+                              }
+                            });
+                            fetchRecipes();
+                          },
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                ),
+              ),
             SizedBox(height: 24),
             Text('Recommended Recipes:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             if (isLoading)
@@ -108,7 +195,15 @@ class _RecipeRecommenderPageState extends State<RecipeRecommenderPage> {
                         ? Image.network(recipe['strMealThumb'], width: 50, height: 50, fit: BoxFit.cover)
                         : null,
                     title: Text(recipe['strMeal'] ?? ''),
-                    subtitle: Text('ID: ${recipe['idMeal'] ?? ''}'),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('ID: ${recipe['idMeal'] ?? ''}'),
+                        Text('Matched: ${recipe['matchedCount']}/${recipe['totalIngredients']}'),
+                        if ((recipe['missingIngredients'] as List).isNotEmpty)
+                          Text('Missing: ${(recipe['missingIngredients'] as List).join(", ")}'),
+                      ],
+                    ),
                     trailing: IconButton(
                       icon: Icon(
                         savedRecipes.any((r) => r['idMeal'] == recipe['idMeal'])
