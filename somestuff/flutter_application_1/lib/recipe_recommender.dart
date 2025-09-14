@@ -8,6 +8,7 @@ class RecipeRecommenderPage extends StatefulWidget {
 }
 
 class _RecipeRecommenderPageState extends State<RecipeRecommenderPage> {
+  List<dynamic> savedRecipes = [];
   final List<String> ingredients = [
     'Tomato',
     'Cheese',
@@ -92,9 +93,45 @@ class _RecipeRecommenderPageState extends State<RecipeRecommenderPage> {
               ),
             if (!isLoading)
               ...recipes.map((recipe) => ListTile(
+                    leading: recipe['strMealThumb'] != null
+                        ? Image.network(recipe['strMealThumb'], width: 50, height: 50, fit: BoxFit.cover)
+                        : null,
                     title: Text(recipe['strMeal'] ?? ''),
                     subtitle: Text('ID: ${recipe['idMeal'] ?? ''}'),
+                    trailing: IconButton(
+                      icon: Icon(
+                        savedRecipes.any((r) => r['idMeal'] == recipe['idMeal'])
+                            ? Icons.bookmark
+                            : Icons.bookmark_border,
+                        color: Colors.deepPurple,
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          if (savedRecipes.any((r) => r['idMeal'] == recipe['idMeal'])) {
+                            savedRecipes.removeWhere((r) => r['idMeal'] == recipe['idMeal']);
+                          } else {
+                            savedRecipes.add(recipe);
+                          }
+                        });
+                      },
+                    ),
                   )),
+            SizedBox(height: 32),
+            if (savedRecipes.isNotEmpty)
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Saved Recipes:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  ...savedRecipes.map((recipe) => Card(
+                        child: ListTile(
+                          leading: recipe['strMealThumb'] != null
+                              ? Image.network(recipe['strMealThumb'], width: 50, height: 50, fit: BoxFit.cover)
+                              : null,
+                          title: Text(recipe['strMeal'] ?? ''),
+                        ),
+                      )),
+                ],
+              ),
           ],
         ),
       ),
