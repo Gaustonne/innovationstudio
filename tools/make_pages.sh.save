@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+
+mkdir -p \
+  "$ROOT/lib/features/auth" \
+  "$ROOT/lib/features/inventory" \
+  "$ROOT/lib/features/recipes" \
+  "$ROOT/lib/features/plan" \
+  "$ROOT/lib/features/settings"
+
+mkpage () {
+  local path="$1"
+  local class="$2"
+  cat > "$ROOT/$path" <<DART
+import 'package:flutter/material.dart';
+
+class $class extends StatelessWidget {
+  const $class({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('$class')),
+      body: const Center(child: Text('$class placeholder')),
+    );
+  }
+}
+DART
+  echo "Created $path"
+}
+
+# ---------- Auth & Onboarding ----------
+mkpage lib/features/auth/sign_in_page.dart               SignInPage
+mkpage lib/features/auth/register_page.dart              RegisterPage
+mkpage lib/features/auth/forgot_password_page.dart       ForgotPasswordPage
+mkpage lib/features/auth/profile_setup_diet_page.dart    ProfileSetupDietPage
+mkpage lib/features/auth/profile_setup_allergens_page.dart ProfileSetupAllergensPage
+
+# ---------- Inventory ----------
+mkpage lib/features/inventory/inventory_page.dart        InventoryPage
+mkpage lib/features/inventory/edit_item_page.dart        EditItemPage
+mkpage lib/features/inventory/item_detail_page.dart      ItemDetailPage
+
+# ---------- Recipes ----------
+mkpage lib/features/recipes/recipe_suggestions_page.dart RecipeSuggestionsPage
+mkpage lib/features/recipes/recipe_detail_page.dart      RecipeDetailPage
+mkpage lib/features/recipes/recipe_filters_page.dart     RecipeFiltersPage
+
+# ---------- Planning & Shopping ----------
+mkpage lib/features/plan/weekly_plan_page.dart           WeeklyPlanPage
+mkpage lib/features/plan/add_to_plan_page.dart           AddToPlanPage
+mkpage lib/features/plan/shopping_list_page.dart         ShoppingListPage
+
+# ---------- Settings ----------
+mkpage lib/features/settings/settings_page.dart              SettingsPage
+mkpage lib/features/settings/notification_settings_page.dart NotificationSettingsPage
+mkpage lib/features/settings/diet_settings_page.dart         DietSettingsPage
+mkpage lib/features/settings/allergen_settings_page.dart     AllergenSettingsPage
+mkpage lib/features/settings/account_settings_page.dart      AccountSettingsPage
+mkpage lib/features/settings/about_page.dart                 AboutPage
+
+
+
+chmod +x tools/make_pages.sh
+bash tools/make_pages.sh
+
+flutter analyze
+flutter run
+git add lib/features
+^X
+
+
+
+cd /path/to/pantry_pilot
+git init
+git add .
+git commit -m "feat(pantry_pilot): scaffold app + empty feature pages"
+git branch -M main
+
