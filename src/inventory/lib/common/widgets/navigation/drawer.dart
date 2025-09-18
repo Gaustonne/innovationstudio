@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../../../features/inventory/presentation/inventory.dart'
     show InventoryPage;
@@ -11,6 +12,7 @@ class AppDrawer extends StatelessWidget {
   final VoidCallback onMain;
   final VoidCallback onExpired;
   final VoidCallback onWasted;
+  final VoidCallback? onSeed;
 
   const AppDrawer({
     super.key,
@@ -20,6 +22,7 @@ class AppDrawer extends StatelessWidget {
     required this.onMain,
     required this.onExpired,
     required this.onWasted,
+    this.onSeed,
   });
 
   @override
@@ -58,6 +61,13 @@ class AppDrawer extends StatelessWidget {
               selected: activePage == InventoryPage.wasted,
               onTap: onWasted,
             ),
+            // Debug-only seed action
+            if (kDebugMode && onSeed != null)
+              ListTile(
+                leading: const Icon(Icons.bug_report),
+                title: const Text('Seed DB (debug)'),
+                onTap: onSeed,
+              ),
             const Spacer(),
             Padding(
               padding: const EdgeInsets.all(12.0),

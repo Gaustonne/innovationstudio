@@ -24,7 +24,7 @@ class ExpiredItemsPage extends StatelessWidget {
         itemBuilder: (context, index) {
           final item = items[index];
           return Dismissible(
-            key: ValueKey('${item.name}-${item.expiry.toIso8601String()}'),
+            key: ValueKey(item.id),
             background: Container(
               color: Colors.green,
               alignment: Alignment.centerLeft,

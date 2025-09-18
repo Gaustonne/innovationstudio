@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../../common/db/models/ingredient.dart';
+import '../../../common/db/collections/inventory_store.dart';
+import '../../../common/db/collections/wasted_store.dart';
 import '../../../common/widgets/navigation/drawer.dart';
 import 'expired.dart';
 import 'wasted.dart';
@@ -31,39 +33,12 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
   // Wasted items list (in-memory)
   final List<Ingredient> _wastedItems = [];
 
-  // Dummy inventory data
-  final List<Ingredient> _dummyItems = [
-    Ingredient(
-      name: 'All-purpose Flour',
-      quantity: 2,
-      weightKg: 1.0,
-      expiry: DateTime.now().add(const Duration(days: 365)),
-    ),
-    Ingredient(
-      name: 'Sugar',
-      quantity: 1,
-      weightKg: 0.5,
-      expiry: DateTime.now().add(const Duration(days: 400)),
-    ),
-    Ingredient(
-      name: 'Eggs',
-      quantity: 12,
-      weightKg: 0.72,
-      expiry: DateTime.now(),
-    ),
-    Ingredient(
-      name: 'Milk',
-      quantity: 1,
-      weightKg: 1.0,
-      expiry: DateTime.now().subtract(const Duration(days: 1)),
-    ),
-    Ingredient(
-      name: 'Butter',
-      quantity: 1,
-      weightKg: 0.25,
-      expiry: DateTime.now().add(const Duration(days: 7)),
-    ),
-  ];
+  // Stores
+  final InventoryStore _inventoryStore = InventoryStore();
+  final WastedStore _wastedStore = WastedStore();
+
+  // In-memory view of inventory (single source-of-truth for UI)
+  List<Ingredient> _items = [];
 
   bool _isExpired(DateTime d) {
     final now = DateTime.now();
@@ -75,7 +50,7 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
   List<Ingredient> _computeDisplayedItems() {
     final now = DateTime.now();
 
-    var items = List<Ingredient>.from(_dummyItems);
+    var items = List<Ingredient>.from(_items);
 
     if (!_showExpired) {
       items = items.where((i) => !_isExpired(i.expiry)).toList();
@@ -106,6 +81,20 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
     super.initState();
     // ensure notifier reflects initial history
     activePageNotifier.value = _history.last;
+    // load persisted data
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    final inv = await _inventoryStore.getAll();
+    final wasted = await _wastedStore.getAll();
+
+    // Use persisted data as single source of truth. Tests can populate DB beforehand.
+    setState(() {
+      _items = inv;
+      _wastedItems.clear();
+      _wastedItems.addAll(wasted);
+    });
   }
 
   void _pushPage(InventoryPage page) {
@@ -115,34 +104,89 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
     activePageNotifier.value = page;
   }
 
-  void _addDaysToItem(Ingredient item, int days) {
-    setState(() {
-      final idx = _dummyItems.indexWhere(
-        (i) => i.name == item.name && i.expiry == item.expiry,
+  Future<void> _addDaysToItem(Ingredient item, int days) async {
+    final idx = _items.indexWhere((i) => i.id == item.id);
+    if (idx != -1) {
+      final updated = item.copyWith(
+        expiry: item.expiry.add(Duration(days: days)),
       );
-      if (idx != -1) {
-        final updated = Ingredient(
-          name: item.name,
-          quantity: item.quantity,
-          weightKg: item.weightKg,
-          expiry: item.expiry.add(Duration(days: days)),
-        );
-        _dummyItems[idx] = updated;
-      }
-    });
+      setState(() => _items[idx] = updated);
+      // persist change
+      await _inventoryStore.update(updated);
+    }
   }
 
-  void _moveToWasted(Ingredient item) {
-    setState(() {
-      // remove first matching by name+expiry
-      final idx = _dummyItems.indexWhere(
-        (i) => i.name == item.name && i.expiry == item.expiry,
-      );
-      if (idx != -1) {
-        final removed = _dummyItems.removeAt(idx);
+  Future<void> _moveToWasted(Ingredient item) async {
+    final idx = _items.indexWhere((i) => i.id == item.id);
+    if (idx != -1) {
+      final removed = _items.removeAt(idx);
+      setState(() {
         _wastedItems.insert(0, removed);
-      }
-    });
+      });
+      // persist change: remove from inventory and add to wasted
+      await _inventoryStore.delete(removed.id);
+      await _wastedStore.insert(removed, movedAt: DateTime.now());
+    }
+  }
+
+  /// Debug helper: clear and seed the application database with sample items.
+  Future<void> _seedDatabase() async {
+    // Clear both tables
+    final existing = await _inventoryStore.getAll();
+    for (final e in existing) {
+      await _inventoryStore.delete(e.id);
+    }
+    final existingW = await _wastedStore.getAll();
+    for (final w in existingW) {
+      await _wastedStore.delete(w.id);
+    }
+
+    // Insert sample inventory
+    final now = DateTime.now();
+    final samples = [
+      Ingredient(
+        name: 'Tomato',
+        quantity: 5,
+        weightKg: 1.2,
+        expiry: now.add(const Duration(days: 14)),
+      ),
+      Ingredient(
+        name: 'Lettuce',
+        quantity: 2,
+        weightKg: 0.5,
+        expiry: now.add(const Duration(days: 21)),
+      ),
+      Ingredient(
+        name: 'Milk',
+        quantity: 1,
+        weightKg: 1.0,
+        expiry: now.add(const Duration(days: 2)),
+      ),
+      Ingredient(
+        name: 'Cheese',
+        quantity: 1,
+        weightKg: 1.0,
+        expiry: now.subtract(const Duration(days: 1)),
+      ),
+      Ingredient(
+        name: 'Eggs',
+        quantity: 12,
+        weightKg: 0.7,
+        expiry: now.subtract(const Duration(days: 5)),
+      ),
+    ];
+
+    for (final s in samples) {
+      await _inventoryStore.insert(s);
+    }
+
+    // Move one item to wasted for example
+    final moved = samples.last;
+    await _inventoryStore.delete(moved.id);
+    await _wastedStore.insert(moved, movedAt: DateTime.now());
+
+    // Reload into memory and refresh UI
+    await _loadData();
   }
 
   @override
@@ -151,18 +195,18 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final end7 = today.add(const Duration(days: 7));
-    final expiringCount = _dummyItems.where((i) {
+    final expiringCount = _items.where((i) {
       final t = DateTime(i.expiry.year, i.expiry.month, i.expiry.day);
       return !t.isBefore(today) && !t.isAfter(end7) && !_isExpired(i.expiry);
     }).length;
-    final expiredCount = _dummyItems.where((i) => _isExpired(i.expiry)).length;
+    final expiredCount = _items.where((i) => _isExpired(i.expiry)).length;
 
     final titleStyle = Theme.of(context).textTheme.displayMedium!.copyWith(
       color: Theme.of(context).colorScheme.onPrimary,
       fontSize: 24,
     );
 
-    final expiredItems = _dummyItems.where((i) => _isExpired(i.expiry)).toList()
+    final expiredItems = _items.where((i) => _isExpired(i.expiry)).toList()
       ..sort((a, b) => a.expiry.compareTo(b.expiry));
 
     return PopScope(
@@ -219,6 +263,35 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
               _pushPage(InventoryPage.wasted);
               Navigator.of(ctx).pop();
             },
+            onSeed: () async {
+              Navigator.of(ctx).pop();
+              // confirm
+              final confirmed = await showDialog<bool>(
+                context: context,
+                builder: (dctx) => AlertDialog(
+                  title: const Text('Seed database?'),
+                  content: const Text(
+                    'This will replace the app DB with sample data.',
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.of(dctx).pop(false),
+                      child: const Text('Cancel'),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.of(dctx).pop(true),
+                      child: const Text('Seed'),
+                    ),
+                  ],
+                ),
+              );
+              if (confirmed == true) {
+                await _seedDatabase();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Database seeded')),
+                );
+              }
+            },
           ),
         ),
         body: ValueListenableBuilder<InventoryPage>(
@@ -252,9 +325,7 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
                     Row(
                       children: [
                         const SizedBox(width: 2),
-                        Text(
-                          'Showing ${displayed.length} of ${_dummyItems.length}',
-                        ),
+                        Text('Showing ${displayed.length} of ${_items.length}'),
                       ],
                     ),
                     const SizedBox(height: 12),
@@ -265,9 +336,7 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
                         itemBuilder: (context, index) {
                           final item = displayed[index];
                           return Dismissible(
-                            key: ValueKey(
-                              '${item.name}-${item.expiry.toIso8601String()}',
-                            ),
+                            key: ValueKey(item.id),
                             background: Container(
                               color: Colors.green,
                               alignment: Alignment.centerLeft,
