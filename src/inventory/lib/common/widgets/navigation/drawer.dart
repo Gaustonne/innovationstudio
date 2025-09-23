@@ -13,6 +13,7 @@ class AppDrawer extends StatelessWidget {
   final VoidCallback onExpired;
   final VoidCallback onWasted;
   final VoidCallback? onSeed;
+  final String? username;
 
   const AppDrawer({
     super.key,
@@ -23,6 +24,7 @@ class AppDrawer extends StatelessWidget {
     required this.onExpired,
     required this.onWasted,
     this.onSeed,
+    this.username,
   });
 
   @override
@@ -69,6 +71,14 @@ class AppDrawer extends StatelessWidget {
                 onTap: onSeed,
               ),
             const Spacer(),
+            if (username != null)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10.0),
+                child: Text(
+                  'Signed in as: $username',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
             Padding(
               padding: const EdgeInsets.all(12.0),
               child: Text('v1.0', style: Theme.of(context).textTheme.bodySmall),

@@ -4,6 +4,7 @@ import '../../../common/db/models/ingredient.dart';
 import '../../../common/db/collections/inventory_store.dart';
 import '../../../common/db/collections/wasted_store.dart';
 import '../../../common/widgets/navigation/drawer.dart';
+import '../../../common/storage/preferences.dart';
 import 'expired.dart';
 import 'wasted.dart';
 import 'item_card.dart';
@@ -39,6 +40,9 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
 
   // In-memory view of inventory (single source-of-truth for UI)
   List<Ingredient> _items = [];
+
+  // Preferences
+  String? _username;
 
   bool _isExpired(DateTime d) {
     final now = DateTime.now();
@@ -83,6 +87,13 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
     activePageNotifier.value = _history.last;
     // load persisted data
     _loadData();
+    _loadPreferences();
+  }
+
+  Future<void> _loadPreferences() async {
+    final prefs = PreferencesService();
+    final name = await prefs.getUsername();
+    setState(() => _username = name);
   }
 
   Future<void> _loadData() async {
@@ -185,6 +196,10 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
     await _inventoryStore.delete(moved.id);
     await _wastedStore.insert(moved, movedAt: DateTime.now());
 
+    final prefs = PreferencesService();
+    await prefs.clear(); // clear existing prefs
+    await prefs.setUsername('Test User');
+
     // Reload into memory and refresh UI
     await _loadData();
   }
@@ -250,6 +265,7 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
             activePage: active,
             expiredCount: expiredCount,
             wastedCount: _wastedItems.length,
+            username: _username,
             onMain: () {
               _pushPage(InventoryPage.main);
               Navigator.of(ctx).pop();
