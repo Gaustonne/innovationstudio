@@ -38,6 +38,32 @@ class AppDatabase {
             movedAt TEXT NOT NULL
           )
         ''');
+
+        await db.execute('''
+          CREATE TABLE meal_plans (
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            description TEXT,
+            prepTimeMinutes INTEGER NOT NULL,
+            tags TEXT,
+            createdAt TEXT NOT NULL
+          )
+        ''');
+
+        await db.execute('''
+          CREATE TABLE meal_plan_ingredients (
+            id TEXT PRIMARY KEY,
+            ingredientId TEXT NOT NULL,
+            mealPlanId TEXT NOT NULL,
+            name TEXT NOT NULL,
+            requiredQuantity INTEGER NOT NULL,
+            requiredWeightKg REAL NOT NULL,
+            FOREIGN KEY (ingredientId) REFERENCES inventory (id) ON DELETE SET NULL,
+            FOREIGN KEY (mealPlanId) REFERENCES meal_plans (id) ON DELETE CASCADE
+          )
+        ''');
+
+        // Add other tables as needed
       },
     );
 
