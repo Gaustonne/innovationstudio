@@ -27,36 +27,43 @@ class _RecipeScreenState extends State<RecipeScreen> {
   void initState() {
     super.initState();
     filteredRecipes = List.from(seededRecipes);
+    filterRecipes(); // Apply scoring on initial load
   }
 
   void filterRecipes() {
     setState(() {
+      // 1. Filter by tags, diet, cook time
       filteredRecipes = seededRecipes.where((recipe) {
-        final matchesTags = selectedTags.isEmpty || recipe.tags.any((tag) => selectedTags.contains(tag));
-        final matchesRule = selectedRuleType == null || recipe.ruleType == selectedRuleType;
+        final matchesTags =
+            selectedTags.isEmpty || recipe.tags.any((tag) => selectedTags.contains(tag));
+        final matchesRule =
+            selectedRuleType == null || recipe.ruleType == selectedRuleType;
         final matchesTime = recipe.cookTimeMinutes <= maxCookTime;
         return matchesTags && matchesRule && matchesTime;
       }).toList();
 
-      // Apply ingredient-based scoring (friend's feature)
-      final userIngredientNames = widget.userIngredients.map((i) => i.name.toLowerCase()).toSet();
+      // 2. Apply ingredient-based scoring (friend's feature)
+      final userIngredientNames =
+          widget.userIngredients.map((i) => i.name.toLowerCase()).toSet();
+
       filteredRecipes = filteredRecipes.map((recipe) {
-        final lowerRecipeIngredients = recipe.ingredients.map((i) => i.toLowerCase()).toList();
-        final matched = lowerRecipeIngredients.where((i) => userIngredientNames.contains(i)).toList();
-        final missing = lowerRecipeIngredients.where((i) => !userIngredientNames.contains(i)).toList();
-        return Recipe(
-          name: recipe.name,
-          ingredients: recipe.ingredients,
-          cookTimeMinutes: recipe.cookTimeMinutes,
-          tags: recipe.tags,
-          ruleType: recipe.ruleType,
-        )..extra = {
-            'matchedCount': matched.length,
-            'missingIngredients': missing,
-          };
+        final lowerRecipeIngredients =
+            recipe.ingredients.map((i) => i.toLowerCase()).toList();
+        final matched =
+            lowerRecipeIngredients.where((i) => userIngredientNames.contains(i)).toList();
+        final missing =
+            lowerRecipeIngredients.where((i) => !userIngredientNames.contains(i)).toList();
+
+        // Safely store extra info in Recipe.extra
+        recipe.extra = {
+          'matchedCount': matched.length,
+          'missingIngredients': missing,
+        };
+
+        return recipe;
       }).toList();
 
-      // Sort by missing ingredients (least missing first)
+      // 3. Sort by least missing ingredients first
       filteredRecipes.sort((a, b) {
         int missingA = (a.extra?['missingIngredients'] as List?)?.length ?? 0;
         int missingB = (b.extra?['missingIngredients'] as List?)?.length ?? 0;
@@ -64,9 +71,6 @@ class _RecipeScreenState extends State<RecipeScreen> {
       });
     });
   }
-
-  // Helper to store extra info (matched/missing) without changing Recipe model
-  Map<String, dynamic>? _getExtra(Recipe r) => r.extra;
 
   @override
   Widget build(BuildContext context) {
@@ -79,7 +83,7 @@ class _RecipeScreenState extends State<RecipeScreen> {
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
-            // Filters
+            // Filters row
             Row(
               children: [
                 Expanded(
@@ -121,6 +125,8 @@ class _RecipeScreenState extends State<RecipeScreen> {
                 ),
               ],
             ),
+
+            // Cook time slider
             Slider(
               value: maxCookTime.toDouble(),
               min: 0,
@@ -135,6 +141,8 @@ class _RecipeScreenState extends State<RecipeScreen> {
               },
             ),
             const SizedBox(height: 12),
+
+            // Recipe list
             Expanded(
               child: filteredRecipes.isEmpty
                   ? const Center(child: Text('No recipes found.'))
@@ -142,9 +150,9 @@ class _RecipeScreenState extends State<RecipeScreen> {
                       itemCount: filteredRecipes.length,
                       itemBuilder: (context, index) {
                         final recipe = filteredRecipes[index];
-                        final extra = _getExtra(recipe);
-                        final missing = extra?['missingIngredients'] ?? [];
-                        final matchedCount = extra?['matchedCount'] ?? 0;
+                        final missing = recipe.extra?['missingIngredients'] ?? [];
+                        final matchedCount = recipe.extra?['matchedCount'] ?? 0;
+
                         return Card(
                           margin: const EdgeInsets.symmetric(vertical: 6),
                           child: ListTile(
@@ -157,7 +165,9 @@ class _RecipeScreenState extends State<RecipeScreen> {
                                 Text('Tags: ${recipe.tags.join(', ')}'),
                                 Text('Diet: ${recipe.ruleType}'),
                                 if (missing.isNotEmpty)
-                                  Text('Missing Ingredients: ${missing.join(', ')} (Matched: $matchedCount/${recipe.ingredients.length})'),
+                                  Text(
+                                    'Missing Ingredients: ${missing.join(', ')} (Matched: $matchedCount/${recipe.ingredients.length})',
+                                  ),
                               ],
                             ),
                           ),
