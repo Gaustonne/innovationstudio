@@ -3,6 +3,7 @@ import 'screens/meal_plan_screen.dart';
 import 'screens/add_ingredient_screen.dart';
 import 'screens/ingredient_overview_screen.dart';
 import 'models/ingredient.dart';
+import 'screens/recipe_screen.dart';
 
 void main() {
   runApp(const MyApp());
@@ -115,6 +116,21 @@ class _HomeScreenState extends State<HomeScreen> {
               },
               child: const Text('Add Ingredient'),
             ),
+            const SizedBox(height: 12),
+            ElevatedButton(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => RecipeScreen(
+                    userIngredients: _ingredients,
+                    weeklyMealPlan: _weeklyMealPlan,
+                  ),
+                ),
+              );
+            },
+            child: const Text('View Recipes'),
+          ),
           ],
         ),
       ),
