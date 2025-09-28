@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
+import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:path/path.dart';
 
 class AppDatabase {
@@ -13,21 +13,14 @@ class AppDatabase {
 
   static Future<Database> get instance async {
     if (_instance != null) return _instance!;
-    // Choose an appropriate database factory and path depending on platform.
+    // For web we must use the ffi web factory and avoid getDatabasesPath()
     String path;
     if (kIsWeb) {
-      // Use web ffi factory (uses IndexedDB under the hood)
+      // Change default factory on the web
       databaseFactory = databaseFactoryFfiWeb;
+      // Use a simple filename on web (sqflite_ffi_web uses indexedDB under the hood)
       path = _dbName;
-    } else if (defaultTargetPlatform == TargetPlatform.windows ||
-        defaultTargetPlatform == TargetPlatform.linux) {
-      // Desktop platforms: initialize ffi and use the ffi factory
-      sqfliteFfiInit();
-      databaseFactory = databaseFactoryFfi;
-      final databasesPath = await getDatabasesPath();
-      path = join(databasesPath, _dbName);
     } else {
-      // Mobile platforms (Android/iOS) and MacOS: use default factory
       final databasesPath = await getDatabasesPath();
       path = join(databasesPath, _dbName);
     }
