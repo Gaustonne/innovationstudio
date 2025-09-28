@@ -1,4 +1,6 @@
+import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
+import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 import 'package:path/path.dart';
 
 class AppDatabase {
@@ -13,6 +15,12 @@ class AppDatabase {
     if (_instance != null) return _instance!;
     final databasesPath = await getDatabasesPath();
     final path = join(databasesPath, _dbName);
+
+    // Initialize FFI for web
+    if (kIsWeb) {
+      // Change default factory on the web
+      databaseFactory = databaseFactoryFfiWeb;
+    }
 
     _instance = await openDatabase(
       path,
