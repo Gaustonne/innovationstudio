@@ -5,7 +5,7 @@ import 'package:path/path.dart';
 
 class AppDatabase {
   static const _dbName = 'inventory.db';
-  static const _dbVersion = 1;
+  static const _dbVersion = 2;
 
   static Database? _instance;
 
@@ -29,56 +29,109 @@ class AppDatabase {
       path,
       version: _dbVersion,
       onCreate: (db, version) async {
-        await db.execute('''
-          CREATE TABLE inventory (
-            id TEXT PRIMARY KEY,
-            name TEXT NOT NULL,
-            quantity INTEGER NOT NULL,
-            weightKg REAL NOT NULL,
-            expiry TEXT NOT NULL
-          )
-        ''');
-
-        await db.execute('''
-          CREATE TABLE wasted (
-            id TEXT PRIMARY KEY,
-            name TEXT NOT NULL,
-            quantity INTEGER NOT NULL,
-            weightKg REAL NOT NULL,
-            expiry TEXT NOT NULL,
-            movedAt TEXT NOT NULL
-          )
-        ''');
-
-        await db.execute('''
-          CREATE TABLE meal_plans (
-            id TEXT PRIMARY KEY,
-            title TEXT NOT NULL,
-            description TEXT,
-            prepTimeMinutes INTEGER NOT NULL,
-            tags TEXT,
-            createdAt TEXT NOT NULL
-          )
-        ''');
-
-        await db.execute('''
-          CREATE TABLE meal_plan_ingredients (
-            id TEXT PRIMARY KEY,
-            ingredientId TEXT NOT NULL,
-            mealPlanId TEXT NOT NULL,
-            name TEXT NOT NULL,
-            requiredQuantity INTEGER NOT NULL,
-            requiredWeightKg REAL NOT NULL,
-            FOREIGN KEY (ingredientId) REFERENCES inventory (id) ON DELETE SET NULL,
-            FOREIGN KEY (mealPlanId) REFERENCES meal_plans (id) ON DELETE CASCADE
-          )
-        ''');
-
-        // Add other tables as needed
+        await _createTables(db);
+      },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          await db.execute('DROP TABLE IF EXISTS shopping_list');
+          await db.execute('''
+            CREATE TABLE shopping_list (
+              id TEXT PRIMARY KEY,
+              name TEXT NOT NULL,
+              quantity REAL NOT NULL,
+              unit TEXT NOT NULL,
+              status TEXT NOT NULL,
+              category TEXT,
+              fromRecipe TEXT,
+              priceOptions TEXT,
+              selectedStore TEXT
+            )
+          ''');
+        }
       },
     );
 
     return _instance!;
+  }
+
+  static Future<void> _createTables(Database db) async {
+    await db.execute('''
+      CREATE TABLE inventory (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        quantity INTEGER NOT NULL,
+        weightKg REAL NOT NULL,
+        expiry TEXT NOT NULL
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE wasted (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        quantity INTEGER NOT NULL,
+        weightKg REAL NOT NULL,
+        expiry TEXT NOT NULL,
+        movedAt TEXT NOT NULL
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE meal_plans (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        description TEXT,
+        prepTimeMinutes INTEGER NOT NULL,
+        tags TEXT,
+        createdAt TEXT NOT NULL
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE meal_plan_ingredients (
+        id TEXT PRIMARY KEY,
+        ingredientId TEXT NOT NULL,
+        mealPlanId TEXT NOT NULL,
+        name TEXT NOT NULL,
+        requiredQuantity INTEGER NOT NULL,
+        requiredWeightKg REAL NOT NULL,
+        FOREIGN KEY (ingredientId) REFERENCES inventory (id) ON DELETE SET NULL,
+        FOREIGN KEY (mealPlanId) REFERENCES meal_plans (id) ON DELETE CASCADE
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE recipes (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        cookTimeMinutes INTEGER NOT NULL,
+        tags TEXT,
+        ruleType TEXT
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE recipe_ingredients (
+        id TEXT PRIMARY KEY,
+        recipeId TEXT NOT NULL,
+        name TEXT NOT NULL,
+        FOREIGN KEY (recipeId) REFERENCES recipes (id) ON DELETE CASCADE
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE shopping_list (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        quantity REAL NOT NULL,
+        unit TEXT NOT NULL,
+        status TEXT NOT NULL,
+        category TEXT,
+        fromRecipe TEXT,
+        priceOptions TEXT,
+        selectedStore TEXT
+      )
+    ''');
   }
 
   static Future<void> close() async {

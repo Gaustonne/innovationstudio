@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../../common/db/models/ingredient.dart';
+import '../../receipt_scanner/receipt_scanner_screen.dart';
 
 /// Result returned by the editor screen to indicate a save or delete action.
 class EditResult {
@@ -34,6 +35,24 @@ class _AddIngredientScreenState extends State<AddIngredientScreen> {
 
   bool get _isEditing => widget.ingredient != null;
   int? _selectedQuickDays;
+
+  Future<void> _scanReceipt() async {
+    final List<Ingredient>? scannedItems = await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const ReceiptScannerScreen()),
+    );
+
+    if (scannedItems != null && scannedItems.isNotEmpty) {
+      // For simplicity, we'll just use the first scanned item.
+      // A real implementation might show a list to the user to select from.
+      final firstItem = scannedItems.first;
+      setState(() {
+        _nameController.text = firstItem.name;
+        _quantityController.text = firstItem.quantity.toString();
+        _weightController.text = firstItem.weightKg.toString();
+        _selectedDate = firstItem.expiry;
+      });
+    }
+  }
 
   Future<void> _pickExpiryDate() async {
     final now = DateTime.now();
@@ -108,6 +127,13 @@ class _AddIngredientScreenState extends State<AddIngredientScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(_isEditing ? 'Edit Ingredient' : 'Add Ingredient'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.camera_alt),
+            onPressed: _scanReceipt,
+            tooltip: 'Scan Receipt',
+          ),
+        ],
       ),
       body: Padding(
         padding: const EdgeInsets.all(16),

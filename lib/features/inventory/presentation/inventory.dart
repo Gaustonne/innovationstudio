@@ -1,8 +1,13 @@
+import '../../shopping_list/presentation/shopping_list_screen.dart';
+import '../../recipes/presentation/recipe_screen.dart';
+import '../../../common/services/pricing_service.dart';
 import 'package:flutter/material.dart';
 
 import '../../../common/db/models/ingredient.dart';
 import '../../../common/db/collections/inventory_store.dart';
 import '../../../common/db/collections/wasted_store.dart';
+import '../../../common/db/collections/shopping_list_store.dart';
+import '../../../common/db/models/shopping_list_item.dart';
 import '../../../common/widgets/navigation/drawer.dart';
 import '../../../common/storage/preferences.dart';
 import 'expired.dart';
@@ -10,7 +15,7 @@ import 'wasted.dart';
 import 'item_card.dart';
 import 'add_item.dart';
 
-enum InventoryPage { main, expired, wasted }
+enum InventoryPage { main, expired, wasted, recipes, shoppingList }
 
 /// Global notifier to persist which page is active across routes.
 final ValueNotifier<InventoryPage> activePageNotifier = ValueNotifier(
@@ -34,10 +39,15 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
 
   // Wasted items list (in-memory)
   final List<Ingredient> _wastedItems = [];
+  
+  // Shopping list items (in-memory)
+  final List<ShoppingListItem> _shoppingList = [];
 
   // Stores
   final InventoryStore _inventoryStore = InventoryStore();
   final WastedStore _wastedStore = WastedStore();
+  final ShoppingListStore _shoppingListStore = ShoppingListStore();
+  final PricingService _pricingService = PricingService();
 
   // In-memory view of inventory (single source-of-truth for UI)
   List<Ingredient> _items = [];
@@ -97,15 +107,32 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
     setState(() => _username = name);
   }
 
-  Future<void> _loadData() async {
+  Future<void> _loadData({bool fetchPrices = false}) async {
     final inv = await _inventoryStore.getAll();
     final wasted = await _wastedStore.getAll();
+    final shopping = await _shoppingListStore.getAll();
+
+    if (fetchPrices) {
+      for (var i = 0; i < shopping.length; i++) {
+        final item = shopping[i];
+        if (item.status == ShoppingItemStatus.buy) {
+          final prices = await _pricingService.getPriceOptions(item.name);
+          shopping[i] = item.copyWith(
+            priceOptions: prices,
+            selectedStore: item.selectedStore ?? (prices.isNotEmpty ? prices.first.store : null),
+          );
+          await _shoppingListStore.update(shopping[i]);
+        }
+      }
+    }
 
     // Use persisted data as single source of truth. Tests can populate DB beforehand.
     setState(() {
       _items = inv;
       _wastedItems.clear();
       _wastedItems.addAll(wasted);
+      _shoppingList.clear();
+      _shoppingList.addAll(shopping);
     });
   }
 
@@ -287,7 +314,11 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
                   ? 'Kitchen Inventory'
                   : active == InventoryPage.expired
                   ? 'Expired items'
-                  : 'Wasted items';
+                  : active == InventoryPage.wasted
+                  ? 'Wasted items'
+                  : active == InventoryPage.recipes
+                  ? 'Recipes'
+                  : 'Shopping List';
               return Text(titleText, style: titleStyle);
             },
           ),
@@ -321,6 +352,14 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
             },
             onWasted: () {
               _pushPage(InventoryPage.wasted);
+              Navigator.of(ctx).pop();
+            },
+            onRecipes: () {
+              _pushPage(InventoryPage.recipes);
+              Navigator.of(ctx).pop();
+            },
+            onShoppingList: () {
+              _pushPage(InventoryPage.shoppingList);
               Navigator.of(ctx).pop();
             },
             onSeed: () async {
@@ -509,8 +548,35 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
                 },
                 onEdit: (item) => _handleAddOrEditFromScreen(existing: item),
               );
-            } else {
+            } else if (active == InventoryPage.wasted) {
               child = WastedItemsPage(items: _wastedItems);
+            } else if (active == InventoryPage.recipes) {
+              child = RecipeScreen(userIngredients: _items);
+            } else if (active == InventoryPage.shoppingList) {
+              child = ShoppingListScreen(
+                shoppingList: _shoppingList,
+                onToggleStatus: (item) async {
+                  final updated = item.copyWith(
+                    status: item.status == ShoppingItemStatus.buy
+                        ? ShoppingItemStatus.have
+                        : ShoppingItemStatus.buy,
+                  );
+                  await _shoppingListStore.update(updated);
+                  _loadData();
+                },
+                onDelete: (id) async {
+                  await _shoppingListStore.delete(id);
+                  _loadData();
+                },
+                onSelectStore: (item, store) async {
+                  final updated = item.copyWith(selectedStore: store);
+                  await _shoppingListStore.update(updated);
+                  _loadData();
+                },
+                onRefresh: () => _loadData(fetchPrices: true),
+              );
+            } else {
+              child = Container();
             }
 
             return AnimatedSwitcher(

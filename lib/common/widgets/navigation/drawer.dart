@@ -12,6 +12,8 @@ class AppDrawer extends StatelessWidget {
   final VoidCallback onMain;
   final VoidCallback onExpired;
   final VoidCallback onWasted;
+  final VoidCallback onRecipes;
+  final VoidCallback onShoppingList;
   final VoidCallback? onSeed;
   final String? username;
 
@@ -23,6 +25,8 @@ class AppDrawer extends StatelessWidget {
     required this.onMain,
     required this.onExpired,
     required this.onWasted,
+    required this.onRecipes,
+    required this.onShoppingList,
     this.onSeed,
     this.username,
   });
@@ -41,8 +45,8 @@ class AppDrawer extends StatelessWidget {
               child: Text(
                 'Inventory',
                 style: Theme.of(context).textTheme.headlineSmall!.copyWith(
-                  color: Theme.of(context).colorScheme.onPrimary,
-                ),
+                      color: Theme.of(context).colorScheme.onPrimary,
+                    ),
               ),
             ),
             ListTile(
@@ -62,6 +66,18 @@ class AppDrawer extends StatelessWidget {
               title: Text('Wasted items ($wastedCount)'),
               selected: activePage == InventoryPage.wasted,
               onTap: onWasted,
+            ),
+            ListTile(
+              leading: const Icon(Icons.restaurant_menu),
+              title: const Text('Recipes'),
+              selected: activePage == InventoryPage.recipes,
+              onTap: onRecipes,
+            ),
+            ListTile(
+              leading: const Icon(Icons.shopping_cart),
+              title: const Text('Shopping List'),
+              selected: activePage == InventoryPage.shoppingList,
+              onTap: onShoppingList,
             ),
             // Debug-only seed action
             if (kDebugMode && onSeed != null)
