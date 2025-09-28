@@ -6,12 +6,14 @@ class ExpiredItemsPage extends StatelessWidget {
   final List<Ingredient> items;
   final void Function(Ingredient) onAddDays;
   final void Function(Ingredient) onWaste;
+  final void Function(Ingredient)? onEdit;
 
   const ExpiredItemsPage({
     super.key,
     required this.items,
     required this.onAddDays,
     required this.onWaste,
+    this.onEdit,
   });
 
   @override
@@ -95,7 +97,10 @@ class ExpiredItemsPage extends StatelessWidget {
                 return false;
               }
             },
-            child: ItemCard(item: item, isExpiredView: true),
+            child: InkWell(
+              onTap: () => onEdit?.call(item),
+              child: ItemCard(item: item, isExpiredView: true),
+            ),
           );
         },
       ),

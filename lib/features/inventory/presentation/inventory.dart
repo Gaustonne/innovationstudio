@@ -8,6 +8,7 @@ import '../../../common/storage/preferences.dart';
 import 'expired.dart';
 import 'wasted.dart';
 import 'item_card.dart';
+import 'add_item.dart';
 
 enum InventoryPage { main, expired, wasted }
 
@@ -124,6 +125,49 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
       setState(() => _items[idx] = updated);
       // persist change
       await _inventoryStore.update(updated);
+    }
+  }
+
+  Future<void> _handleAddOrEditFromScreen({Ingredient? existing}) async {
+    final result = await Navigator.of(context).push<dynamic>(
+      MaterialPageRoute(
+        builder: (_) => AddIngredientScreen(ingredient: existing),
+      ),
+    );
+
+    if (result == null) return;
+
+    // Editor returns EditResult (saved or deleted)
+    if (result is EditResult) {
+      if (result.deletedId != null) {
+        // remove from in-memory and DB
+        final idx = _items.indexWhere((i) => i.id == result.deletedId);
+        if (idx != -1) setState(() => _items.removeAt(idx));
+        await _inventoryStore.delete(result.deletedId!);
+        return;
+      }
+
+      final saved = result.item!;
+      final idx = _items.indexWhere((i) => i.id == saved.id);
+      if (idx != -1) {
+        // update
+        setState(() => _items[idx] = saved);
+        await _inventoryStore.update(saved);
+      } else {
+        // insert
+        await _inventoryStore.insert(saved);
+        setState(() => _items.insert(0, saved));
+      }
+    } else if (result is Ingredient) {
+      // backwards-compat if editor returned Ingredient
+      final idx = _items.indexWhere((i) => i.id == result.id);
+      if (idx != -1) {
+        setState(() => _items[idx] = result);
+        await _inventoryStore.update(result);
+      } else {
+        await _inventoryStore.insert(result);
+        setState(() => _items.insert(0, result));
+      }
     }
   }
 
@@ -281,7 +325,8 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
             },
             onSeed: () async {
               Navigator.of(ctx).pop();
-              // confirm
+              // confirm (capture messenger before await)
+              final messenger = ScaffoldMessenger.of(context);
               final confirmed = await showDialog<bool>(
                 context: context,
                 builder: (dctx) => AlertDialog(
@@ -303,7 +348,7 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
               );
               if (confirmed == true) {
                 await _seedDatabase();
-                ScaffoldMessenger.of(context).showSnackBar(
+                messenger.showSnackBar(
                   const SnackBar(content: Text('Database seeded')),
                 );
               }
@@ -443,7 +488,11 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
                                 return false;
                               }
                             },
-                            child: ItemCard(item: item),
+                            child: InkWell(
+                              onTap: () =>
+                                  _handleAddOrEditFromScreen(existing: item),
+                              child: ItemCard(item: item),
+                            ),
                           );
                         },
                       ),
@@ -458,6 +507,7 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
                 onWaste: (item) {
                   _moveToWasted(item);
                 },
+                onEdit: (item) => _handleAddOrEditFromScreen(existing: item),
               );
             } else {
               child = WastedItemsPage(items: _wastedItems);
@@ -470,6 +520,10 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
               child: SizedBox(key: ValueKey(active), child: child),
             );
           },
+        ),
+        floatingActionButton: FloatingActionButton(
+          onPressed: () => _handleAddOrEditFromScreen(),
+          child: const Icon(Icons.add),
         ),
       ),
     );
