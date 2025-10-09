@@ -32,25 +32,39 @@ class Ingredient {
   }
 
   Map<String, Object?> toMap() => {
-    'id': id,
-    'name': name,
-    'quantity': quantity,
-    'weightKg': weightKg,
-    'expiry': expiry.toIso8601String(),
-  };
+        'id': id,
+        'name': name,
+        'quantity': quantity,
+        'weightKg': weightKg,
+        'expiry': expiry.toIso8601String(),
+      };
 
-  factory Ingredient.fromMap(Map<String, Object?> m) => Ingredient(
-    id: m['id'] as String?,
-    name: m['name'] as String,
-    quantity: (m['quantity'] as num).toInt(),
-    weightKg: (m['weightKg'] as num).toDouble(),
-    expiry: DateTime.parse(m['expiry'] as String),
-  );
+  factory Ingredient.fromMap(Map<String, dynamic> m) {
+    final rawExpiry = m['expiry'];
+    final DateTime expiry;
+    if (rawExpiry is String) {
+      expiry = DateTime.parse(rawExpiry);
+    } else if (rawExpiry is int) {
+      expiry = DateTime.fromMillisecondsSinceEpoch(rawExpiry);
+    } else {
+      expiry = DateTime.now();
+    }
+
+    return Ingredient(
+      id: m['id'] as String,
+      name: m['name'] as String,
+      quantity: (m['quantity'] as num).toInt(),
+      weightKg: (m['weightKg'] as num).toDouble(),
+      expiry: expiry,
+    );
+  }
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is Ingredient && runtimeType == other.runtimeType && id == other.id;
+      other is Ingredient &&
+          runtimeType == other.runtimeType &&
+          id == other.id;
 
   @override
   int get hashCode => id.hashCode;
