@@ -22,6 +22,10 @@ final ValueNotifier<InventoryPage> activePageNotifier = ValueNotifier(
   InventoryPage.main,
 );
 
+/// Simple notifier other parts of the app can toggle to request the inventory
+/// UI reload its data from the DB. Increment the value to trigger a reload.
+final ValueNotifier<int> inventoryRefreshNotifier = ValueNotifier<int>(0);
+
 class InventoryHomePage extends StatefulWidget {
   const InventoryHomePage({super.key});
 
@@ -39,7 +43,7 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
 
   // Wasted items list (in-memory)
   final List<Ingredient> _wastedItems = [];
-  
+
   // Shopping list items (in-memory)
   final List<ShoppingListItem> _shoppingList = [];
 
@@ -99,6 +103,13 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
     // load persisted data
     _loadData();
     _loadPreferences();
+    // react to external refresh requests
+    inventoryRefreshNotifier.addListener(_onInventoryRefreshRequested);
+  }
+
+  void _onInventoryRefreshRequested() {
+    // simply reload data when notifier changes
+    _loadData();
   }
 
   Future<void> _loadPreferences() async {
@@ -119,7 +130,9 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
           final prices = await _pricingService.getPriceOptions(item.name);
           shopping[i] = item.copyWith(
             priceOptions: prices,
-            selectedStore: item.selectedStore ?? (prices.isNotEmpty ? prices.first.store : null),
+            selectedStore:
+                item.selectedStore ??
+                (prices.isNotEmpty ? prices.first.store : null),
           );
           await _shoppingListStore.update(shopping[i]);
         }
@@ -593,5 +606,11 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
         ),
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    inventoryRefreshNotifier.removeListener(_onInventoryRefreshRequested);
+    super.dispose();
   }
 }

@@ -49,15 +49,25 @@ class ItemCard extends StatelessWidget {
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('Expiry: ${formatDate(item.expiry)}'),
-                          const SizedBox(height: 2),
-                          Text(
-                            relativeExpiry(item.expiry),
-                            style: TextStyle(
-                              color: expiryColor(item.expiry),
-                              fontWeight: FontWeight.w600,
+                          if (item.expiry.millisecondsSinceEpoch == 0)
+                            const Text(
+                              'Expiry: Not set',
+                              style: TextStyle(
+                                color: Colors.red,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            )
+                          else ...[
+                            Text('Expiry: ${formatDate(item.expiry)}'),
+                            const SizedBox(height: 2),
+                            Text(
+                              relativeExpiry(item.expiry),
+                              style: TextStyle(
+                                color: expiryColor(item.expiry),
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
-                          ),
+                          ],
                         ],
                       ),
                     ],
