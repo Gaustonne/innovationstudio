@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 import '../../../common/db/models/ingredient.dart';
 import '../../../common/db/collections/inventory_store.dart';
@@ -9,12 +10,9 @@ import '../inventory/presentation/item_card.dart';
 import '../inventory/presentation/add_item.dart';
 import '../inventory/presentation/inventory.dart';
 
-// NOTE: Set these to your real keys/endpoints. For security, prefer storing
-// them in secure storage or environment variables in production.
-const String kImgbbApiKey = '<YOUR_IMGBB_API_KEY>';
-const String kAzureEndpoint =
-    '<YOUR_AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT>'; // e.g. https://<resource-name>.cognitiveservices.azure.com/
-const String kAzureApiKey = '<YOUR_AZURE_API_KEY>';
+String get _kImgbbApiKey => dotenv.env['IMGBB_API_KEY'] ?? '';
+String get _kAzureEndpoint => dotenv.env['AZURE_ENDPOINT'] ?? '';
+String get _kAzureApiKey => dotenv.env['AZURE_API_KEY'] ?? '';
 
 class ReceiptScannerScreen extends StatefulWidget {
   const ReceiptScannerScreen({super.key});
@@ -27,6 +25,7 @@ class _ReceiptScannerScreenState extends State<ReceiptScannerScreen> {
   List<Ingredient> _scannedItems = [];
   bool _isLoading = false;
   bool _useSample = false;
+  bool _envLoaded = false;
 
   Future<XFile?> _pickImage() async {
     try {
@@ -43,12 +42,12 @@ class _ReceiptScannerScreenState extends State<ReceiptScannerScreen> {
   }
 
   Future<String?> _uploadToImgbb(XFile file) async {
-    if (kImgbbApiKey.startsWith('<')) return null;
+    if (_kImgbbApiKey.isEmpty) return null;
     try {
       final bytes = await file.readAsBytes();
       final base64Image = base64Encode(bytes);
       final resp = await http.post(
-        Uri.parse('https://api.imgbb.com/1/upload?key=$kImgbbApiKey'),
+        Uri.parse('https://api.imgbb.com/1/upload?key=${_kImgbbApiKey}'),
         body: {'image': base64Image},
       );
       if (resp.statusCode == 200) {
@@ -64,17 +63,17 @@ class _ReceiptScannerScreenState extends State<ReceiptScannerScreen> {
   }
 
   Future<Map<String, dynamic>?> _analyzeWithAzure(String imageUrl) async {
-    if (kAzureEndpoint.startsWith('<') || kAzureApiKey.startsWith('<')) {
+    if (_kAzureEndpoint.isEmpty || _kAzureApiKey.isEmpty) {
       return null;
     }
     try {
       final uri = Uri.parse(
-        '$kAzureEndpoint/formrecognizer/documentModels/prebuilt-receipt:analyze?api-version=2024-09-30-preview',
+        '$_kAzureEndpoint/documentintelligence/documentModels/prebuilt-receipt:analyze?api-version=2024-11-30',
       );
       final resp = await http.post(
         uri,
         headers: {
-          'Ocp-Apim-Subscription-Key': kAzureApiKey,
+          'Ocp-Apim-Subscription-Key': _kAzureApiKey,
           'Content-Type': 'application/json',
         },
         body: jsonEncode({'urlSource': imageUrl}),
@@ -86,7 +85,7 @@ class _ReceiptScannerScreenState extends State<ReceiptScannerScreen> {
           await Future.delayed(Duration(seconds: 1 << i));
           final r = await http.get(
             Uri.parse(opLocation),
-            headers: {'Ocp-Apim-Subscription-Key': kAzureApiKey},
+            headers: {'Ocp-Apim-Subscription-Key': _kAzureApiKey},
           );
           if (r.statusCode == 200) {
             final Map<String, dynamic> j =
@@ -229,7 +228,10 @@ class _ReceiptScannerScreenState extends State<ReceiptScannerScreen> {
     }
 
     messenger.showSnackBar(
-      const SnackBar(content: Text('Analyzing... This may take a moment')),
+      const SnackBar(
+        content: Text('Analyzing... This may take a moment'),
+        duration: Duration(seconds: 10),
+      ),
     );
     final result = await _analyzeWithAzure(imageUrl);
     if (result == null) {
@@ -245,6 +247,75 @@ class _ReceiptScannerScreenState extends State<ReceiptScannerScreen> {
       _scannedItems = parsed;
       _isLoading = false;
     });
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _ensureEnvLoaded();
+  }
+
+  Future<void> _ensureEnvLoaded() async {
+    try {
+      // If dotenv hasn't been loaded yet, try to load .env from project root.
+      if (dotenv.env.isEmpty) {
+        await dotenv.load(fileName: '.env');
+      }
+    } catch (e) {
+      debugPrint('dotenv load failed: $e');
+    } finally {
+      if (mounted) setState(() => _envLoaded = true);
+    }
+  }
+
+  Widget _buildEnvBanner() {
+    if (!_envLoaded) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(8.0),
+        color: Colors.grey.shade200,
+        child: const Text('Loading environment...'),
+      );
+    }
+
+    final liveEnabled =
+        _kImgbbApiKey.isNotEmpty &&
+        _kAzureEndpoint.isNotEmpty &&
+        _kAzureApiKey.isNotEmpty;
+
+    if (liveEnabled) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(8.0),
+        decoration: BoxDecoration(
+          color: Colors.green.shade50,
+          borderRadius: BorderRadius.circular(6.0),
+        ),
+        child: Row(
+          children: const [
+            Icon(Icons.cloud_done, color: Colors.green),
+            SizedBox(width: 8),
+            Expanded(child: Text('Live receipt analysis enabled')),
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(8.0),
+      decoration: BoxDecoration(
+        color: Colors.amber.shade50,
+        borderRadius: BorderRadius.circular(6.0),
+      ),
+      child: Row(
+        children: const [
+          Icon(Icons.cloud_off, color: Colors.orange),
+          SizedBox(width: 8),
+          Expanded(child: Text('Using sample JSON or missing API keys')),
+        ],
+      ),
+    );
   }
 
   @override
@@ -270,6 +341,10 @@ class _ReceiptScannerScreenState extends State<ReceiptScannerScreen> {
                 ),
               ],
             ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12.0),
+            child: _buildEnvBanner(),
           ),
           Expanded(
             child: Padding(
