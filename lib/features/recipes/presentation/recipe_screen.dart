@@ -1,16 +1,18 @@
 import 'package:flutter/material.dart';
 import '../../../common/db/collections/shopping_list_store.dart';
 import '../../../common/db/models/shopping_list_item.dart';
+import '../data/recipe_service.dart';
 import '../domain/recipe.dart';
-import '../domain/recipe_data.dart';
 import '../../../common/db/models/ingredient.dart';
 
 class RecipeScreen extends StatefulWidget {
   final List<Ingredient> userIngredients;
+  final VoidCallback? onShoppingListUpdated;
 
   const RecipeScreen({
     super.key,
     required this.userIngredients,
+    this.onShoppingListUpdated,
   });
 
   @override
@@ -18,28 +20,53 @@ class RecipeScreen extends StatefulWidget {
 }
 
 class _RecipeScreenState extends State<RecipeScreen> {
+  final RecipeService _recipeService = RecipeService();
+  List<Recipe> _allRecipes = [];
   List<Recipe> filteredRecipes = [];
   List<String> selectedTags = [];
   String? selectedRuleType;
-  int maxCookTime = 60;
+  int maxCookTime = 240; // API doesn't provide cook time, so this is a placeholder
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    filteredRecipes = List.from(seededRecipes);
-    filterRecipes(); // Apply scoring on initial load
+    _fetchRecipes();
+  }
+
+  Future<void> _fetchRecipes() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final ingredientNames = widget.userIngredients.map((i) => i.name).toList();
+      _allRecipes = await _recipeService.getRecipes(ingredientNames);
+      filterRecipes();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load recipes: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   void filterRecipes() {
     setState(() {
-      // 1. Filter by tags, diet, cook time
-      filteredRecipes = seededRecipes.where((recipe) {
+      // 1. Filter by tags, diet
+      filteredRecipes = _allRecipes.where((recipe) {
         final matchesTags =
             selectedTags.isEmpty || recipe.tags.any((tag) => selectedTags.contains(tag));
         final matchesRule =
             selectedRuleType == null || recipe.ruleType == selectedRuleType;
-        final matchesTime = recipe.cookTimeMinutes <= maxCookTime;
-        return matchesTags && matchesRule && matchesTime;
+        return matchesTags && matchesRule;
       }).toList();
 
       // 2. Apply ingredient-based scoring and filtering
@@ -54,15 +81,14 @@ class _RecipeScreenState extends State<RecipeScreen> {
         final missing =
             lowerRecipeIngredients.where((i) => !userIngredientNames.contains(i)).toList();
 
-        // Safely store extra info in Recipe.extra
         recipe.extra = {
           'matchedCount': matched.length,
           'missingIngredients': missing,
+          'matchedIngredients': matched,
         };
 
         return recipe;
       }).where((recipe) {
-        // Only include recipes with at least one matched ingredient
         final matchedCount = recipe.extra?['matchedCount'] as int? ?? 0;
         return matchedCount > 0;
       }).toList();
@@ -72,12 +98,10 @@ class _RecipeScreenState extends State<RecipeScreen> {
         final matchedA = a.extra?['matchedCount'] as int? ?? 0;
         final matchedB = b.extra?['matchedCount'] as int? ?? 0;
         
-        // Sort by most matched ingredients first
         if (matchedA != matchedB) {
           return matchedB.compareTo(matchedA);
         }
 
-        // If matched counts are equal, sort by least missing ingredients
         final missingA = (a.extra?['missingIngredients'] as List?)?.length ?? 0;
         final missingB = (b.extra?['missingIngredients'] as List?)?.length ?? 0;
         return missingA.compareTo(missingB);
@@ -87,16 +111,18 @@ class _RecipeScreenState extends State<RecipeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final allTags = seededRecipes.expand((r) => r.tags).toSet().toList();
-    final allRuleTypes = seededRecipes.map((r) => r.ruleType).toSet().toList();
+    final allTags = _allRecipes.expand((r) => r.tags).toSet().toList();
+    final allRuleTypes = _allRecipes.map((r) => r.ruleType).toSet().toList();
 
     return Scaffold(
       appBar: AppBar(title: const Text('Recipes')),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            // Filters row
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                children: [
+                  // Filters row
             Row(
               children: [
                 Expanded(
@@ -140,19 +166,19 @@ class _RecipeScreenState extends State<RecipeScreen> {
             ),
 
             // Cook time slider
-            Slider(
-              value: maxCookTime.toDouble(),
-              min: 0,
-              max: 120,
-              divisions: 24,
-              label: '$maxCookTime min',
-              onChanged: (value) {
-                setState(() {
-                  maxCookTime = value.toInt();
-                  filterRecipes();
-                });
-              },
-            ),
+            // Slider(
+            //   value: maxCookTime.toDouble(),
+            //   min: 0,
+            //   max: 120,
+            //   divisions: 24,
+            //   label: '$maxCookTime min',
+            //   onChanged: (value) {
+            //     setState(() {
+            //       maxCookTime = value.toInt();
+            //       filterRecipes();
+            //     });
+            //   },
+            // ),
             const SizedBox(height: 12),
 
             // Recipe list
@@ -163,23 +189,30 @@ class _RecipeScreenState extends State<RecipeScreen> {
                       itemCount: filteredRecipes.length,
                       itemBuilder: (context, index) {
                         final recipe = filteredRecipes[index];
-                        final missing = recipe.extra?['missingIngredients'] ?? [];
-                        final matchedCount = recipe.extra?['matchedCount'] ?? 0;
+                        final missing = recipe.extra?['missingIngredients'] as List? ?? [];
+                        final matched = recipe.extra?['matchedIngredients'] as List? ?? [];
 
                         return Card(
                           margin: const EdgeInsets.symmetric(vertical: 6),
                           child: ListTile(
+                            leading: recipe.imageUrl != null
+                                ? Image.network(recipe.imageUrl!)
+                                : null,
                             title: Text(recipe.name),
                             subtitle: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text('Ingredients: ${recipe.ingredients.join(', ')}'),
-                                Text('Cook Time: ${recipe.cookTimeMinutes} min'),
                                 Text('Tags: ${recipe.tags.join(', ')}'),
                                 Text('Diet: ${recipe.ruleType}'),
+                                if (matched.isNotEmpty)
+                                  Text(
+                                    'Matched: ${matched.join(', ')}',
+                                    style: const TextStyle(color: Colors.green),
+                                  ),
                                 if (missing.isNotEmpty)
                                   Text(
-                                    'Missing Ingredients: ${missing.join(', ')} (Matched: $matchedCount/${recipe.ingredients.length})',
+                                    'Missing: ${missing.join(', ')} (${matched.length}/${recipe.ingredients.length})',
+                                    style: const TextStyle(color: Colors.red),
                                   ),
                                 if (missing.isNotEmpty)
                                   ElevatedButton(
@@ -192,6 +225,7 @@ class _RecipeScreenState extends State<RecipeScreen> {
                                           unit: 'unit',
                                         ));
                                       }
+                                      widget.onShoppingListUpdated?.call();
                                       ScaffoldMessenger.of(context).showSnackBar(
                                         SnackBar(
                                           content: Text(

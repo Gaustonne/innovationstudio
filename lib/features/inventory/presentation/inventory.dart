@@ -2,6 +2,7 @@ import '../../shopping_list/presentation/shopping_list_screen.dart';
 import '../../recipes/presentation/recipe_screen.dart';
 import '../../../common/services/pricing_service.dart';
 import 'package:flutter/material.dart';
+import 'barcode_scanner_screen.dart';
 
 import '../../../common/db/models/ingredient.dart';
 import '../../../common/db/collections/inventory_store.dart';
@@ -152,6 +153,24 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
       setState(() => _items[idx] = updated);
       // persist change
       await _inventoryStore.update(updated);
+    }
+  }
+
+  Future<void> _handleBarcodeScanner() async {
+    final result = await Navigator.of(context).push<BarcodeScannerResult>(
+      MaterialPageRoute(
+        builder: (_) => const BarcodeScannerScreen(),
+      ),
+    );
+
+    if (result == null) return;
+
+    // If we have a suggested ingredient from barcode lookup, use it
+    if (result.suggestedIngredient != null) {
+      _handleAddOrEditFromScreen(existing: result.suggestedIngredient);
+    } else {
+      // Manual entry fallback
+      _handleAddOrEditFromScreen();
     }
   }
 
@@ -426,6 +445,20 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
                       children: [
                         const SizedBox(width: 2),
                         Text('Showing ${displayed.length} of ${_items.length}'),
+                        const Spacer(),
+                        ElevatedButton.icon(
+                          onPressed: () => _handleBarcodeScanner(),
+                          icon: const Icon(Icons.qr_code_scanner),
+                          label: const Text('Scan Barcode'),
+                        ),
+                        const SizedBox(width: 8),
+                        ElevatedButton.icon(
+                          onPressed: () {
+                            _pushPage(InventoryPage.recipes);
+                          },
+                          icon: const Icon(Icons.restaurant_menu),
+                          label: const Text('Find Recipes'),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 12),
@@ -551,7 +584,10 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
             } else if (active == InventoryPage.wasted) {
               child = WastedItemsPage(items: _wastedItems);
             } else if (active == InventoryPage.recipes) {
-              child = RecipeScreen(userIngredients: _items);
+              child = RecipeScreen(
+                userIngredients: _items,
+                onShoppingListUpdated: () => _loadData(fetchPrices: true),
+              );
             } else if (active == InventoryPage.shoppingList) {
               child = ShoppingListScreen(
                 shoppingList: _shoppingList,

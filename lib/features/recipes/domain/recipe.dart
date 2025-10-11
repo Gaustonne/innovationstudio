@@ -7,6 +7,7 @@ class Recipe {
   final int cookTimeMinutes;
   final List<String> tags;
   final String ruleType;
+  final String? imageUrl;
 
   Map<String, dynamic>? extra;
 
@@ -17,6 +18,7 @@ class Recipe {
     required this.cookTimeMinutes,
     required this.tags,
     required this.ruleType,
+    this.imageUrl,
     this.extra,
   }) : id = id ?? const Uuid().v4();
 
@@ -27,6 +29,7 @@ class Recipe {
       'cookTimeMinutes': cookTimeMinutes,
       'tags': tags.join(','),
       'ruleType': ruleType,
+      'imageUrl': imageUrl,
     };
   }
 
@@ -38,6 +41,7 @@ class Recipe {
       tags: (map['tags'] as String).split(','),
       ruleType: map['ruleType'],
       ingredients: ingredients,
+      imageUrl: map['imageUrl'],
     );
   }
 }

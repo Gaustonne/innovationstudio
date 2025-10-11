@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../../common/db/models/shopping_list_item.dart';
+import '../domain/ingredient_category.dart';
 
 class ShoppingListScreen extends StatefulWidget {
   final List<ShoppingListItem> shoppingList;
@@ -46,12 +47,13 @@ class _ShoppingListScreenState extends State<ShoppingListScreen> {
     });
 
     // Group items by category
-    final groupedItems = <String, List<ShoppingListItem>>{};
-    for (var item in widget.shoppingList) {
-      (groupedItems[item.category] ??= []).add(item);
-    }
+    final groupedItems = IngredientCategorizer.categorizeList<ShoppingListItem>(
+      widget.shoppingList,
+      (item) => item.name,
+    );
 
-    final sortedCategories = groupedItems.keys.toList()..sort();
+    final sortedCategories = groupedItems.keys.toList()
+      ..sort((a, b) => a.toString().compareTo(b.toString()));
 
     return Scaffold(
       body: CustomScrollView(
@@ -60,6 +62,13 @@ class _ShoppingListScreenState extends State<ShoppingListScreen> {
             title: const Text('Shopping List'),
             pinned: true,
             expandedHeight: 150.0,
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.refresh),
+                onPressed: widget.onRefresh,
+                tooltip: 'Refresh Prices',
+              ),
+            ],
             flexibleSpace: FlexibleSpaceBar(
               background: _buildHeader(
                 totalItems,
@@ -99,7 +108,8 @@ class _ShoppingListScreenState extends State<ShoppingListScreen> {
                 slivers: [
                   SliverPersistentHeader(
                     pinned: true,
-                    delegate: _SliverHeaderDelegate(title: category),
+                    delegate: _SliverHeaderDelegate(
+                        title: category.toString().split('.').last),
                   ),
                   SliverList(
                     delegate: SliverChildBuilderDelegate(
@@ -119,11 +129,6 @@ class _ShoppingListScreenState extends State<ShoppingListScreen> {
               );
             }),
         ],
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: widget.onRefresh,
-        label: const Text('Refresh'),
-        icon: const Icon(Icons.refresh),
       ),
     );
   }
@@ -191,10 +196,10 @@ class _SliverHeaderDelegate extends SliverPersistentHeaderDelegate {
   }
 
   @override
-  double get maxExtent => 40.0;
+  double get maxExtent => 36.0;
 
   @override
-  double get minExtent => 40.0;
+  double get minExtent => 36.0;
 
   @override
   bool shouldRebuild(covariant SliverPersistentHeaderDelegate oldDelegate) {
@@ -259,19 +264,22 @@ class _ShoppingListItemCardState extends State<ShoppingListItemCard> {
     final bestPrice = item.priceOptions.isNotEmpty
         ? item.priceOptions.reduce((a, b) => a.price < b.price ? a : b)
         : null;
+    
+    final bool isHave = item.status == ShoppingItemStatus.have;
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 6.0),
+      color: isHave ? Colors.grey.shade300 : null,
       child: Column(
         children: [
           ListTile(
             leading: Checkbox(
-              value: item.status == ShoppingItemStatus.have,
+              value: isHave,
               onChanged: (value) => widget.onToggleStatus(item),
             ),
             title: Text(item.name,
                 style: TextStyle(
-                    decoration: item.status == ShoppingItemStatus.have
+                    decoration: isHave
                         ? TextDecoration.lineThrough
                         : null)),
             subtitle: Column(
@@ -332,6 +340,9 @@ class _ShoppingListItemCardState extends State<ShoppingListItemCard> {
                       groupValue: item.selectedStore,
                       onChanged: (store) {
                         widget.onSelectStore(item, store!);
+                        setState(() {
+                          _isExpanded = false;
+                        });
                       },
                       secondary: isSelected
                           ? const Icon(Icons.check_circle, color: Colors.green)
