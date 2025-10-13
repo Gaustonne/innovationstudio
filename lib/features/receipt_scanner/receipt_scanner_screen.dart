@@ -30,9 +30,23 @@ class _ReceiptScannerScreenState extends State<ReceiptScannerScreen> {
   Future<XFile?> _pickImage() async {
     try {
       final picker = ImagePicker();
-      final photo = await picker.pickImage(source: ImageSource.camera);
+      // On some Android versions (9+), HEIC/HEIF images are only returned
+      // if you request a size modification. Provide maxWidth and imageQuality
+      // so gallery/camera picks return a compatible image.
+      const double maxWidth = 4000;
+      const int imageQuality = 100;
+
+      final photo = await picker.pickImage(
+        source: ImageSource.camera,
+        maxWidth: maxWidth,
+        imageQuality: imageQuality,
+      );
       if (photo == null) {
-        return await picker.pickImage(source: ImageSource.gallery);
+        return await picker.pickImage(
+          source: ImageSource.gallery,
+          maxWidth: maxWidth,
+          imageQuality: imageQuality,
+        );
       }
       return photo;
     } catch (e) {
@@ -45,19 +59,34 @@ class _ReceiptScannerScreenState extends State<ReceiptScannerScreen> {
     if (_kImgbbApiKey.isEmpty) return null;
     try {
       final bytes = await file.readAsBytes();
-      final base64Image = base64Encode(bytes);
-      final resp = await http.post(
-        Uri.parse('https://api.imgbb.com/1/upload?key=${_kImgbbApiKey}'),
-        body: {'image': base64Image},
+
+      // Use multipart/form-data and send the image as a named file field.
+      final uri = Uri.parse(
+        'https://api.imgbb.com/1/upload?key=${_kImgbbApiKey}',
       );
+      final request = http.MultipartRequest('POST', uri);
+
+      // imgbb accepts an "image" field. Use the original bytes; when possible
+      // callers should convert to JPEG if needed (optional enhancement).
+      final multipartFile = http.MultipartFile.fromBytes(
+        'image',
+        bytes,
+        filename: 'upload.jpg',
+      );
+      request.files.add(multipartFile);
+
+      final streamed = await request.send();
+      final resp = await http.Response.fromStream(streamed);
       if (resp.statusCode == 200) {
         final Map<String, dynamic> j =
             jsonDecode(resp.body) as Map<String, dynamic>;
         return j['data']?['url'] as String?;
       }
-      debugPrint('imgbb upload failed: ${resp.statusCode} ${resp.body}');
+      debugPrint(
+        'imgbb multipart upload failed: ${resp.statusCode} ${resp.body}',
+      );
     } catch (e) {
-      debugPrint('imgbb upload error: $e');
+      debugPrint('imgbb multipart upload error: $e');
     }
     return null;
   }
