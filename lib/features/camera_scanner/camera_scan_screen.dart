@@ -1,9 +1,10 @@
 import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
-import 'package:google_mlkit_image_labeling/google_mlkit_image_labeling.dart';
+import 'package:http/http.dart' as http;
 
 class CameraScanScreen extends StatefulWidget {
   const CameraScanScreen({Key? key}) : super(key: key);
@@ -17,9 +18,15 @@ class _CameraScanScreenState extends State<CameraScanScreen> {
   Future<void>? _initializeControllerFuture;
   XFile? _capturedImage;
 
-  // ML Kit results
-  List<ImageLabel> _labels = [];
+  // Azure prediction results
+  String? _predictedLabel;
+  double? _confidence;
   bool _isProcessing = false;
+
+  final String _predictionKey = '4jFsYRIQmKpBGgRYE9oebAbWQAD6UGuYBDSaoUVpiknSjnozVdfxJQQJ99BJACi0881XJ3w3AAAIACOGvhXu';
+  final String _endpoint = 'https://customvisionkimleng-prediction.cognitiveservices.azure.com/';
+  final String _projectId = '160499c0-eaed-47c2-8191-8cee61ce9ef8';
+  final String _iterationName = 'Iteration3';
 
   @override
   void initState() {
@@ -48,14 +55,15 @@ class _CameraScanScreenState extends State<CameraScanScreen> {
     super.dispose();
   }
 
-  /// Capture the image and run ML Kit label detection
-  Future<void> _captureAndDetect() async {
+  /// Capture the image and send it to Azure Custom Vision
+  Future<void> _captureAndPredict() async {
     if (_controller == null) return;
 
     try {
       setState(() {
         _isProcessing = true;
-        _labels = [];
+        _predictedLabel = null;
+        _confidence = null;
       });
 
       await _initializeControllerFuture;
@@ -68,24 +76,39 @@ class _CameraScanScreenState extends State<CameraScanScreen> {
         '${DateTime.now().millisecondsSinceEpoch}.jpg',
       );
       final savedImage = await File(image.path).copy(imagePath);
-
       setState(() => _capturedImage = XFile(savedImage.path));
 
-      // Run ML Kit label detection
-      final inputImage = InputImage.fromFilePath(savedImage.path);
-      final options = ImageLabelerOptions(confidenceThreshold: 0.5);
-      final labeler = ImageLabeler(options: options);
+      // Send image to Azure Custom Vision Prediction API
+      final predictionUrl =
+          '$_endpoint/customvision/v3.0/Prediction/$_projectId/classify/iterations/$_iterationName/image';
 
-      final labels = await labeler.processImage(inputImage);
+      final bytes = await File(savedImage.path).readAsBytes();
+      final response = await http.post(
+        Uri.parse(predictionUrl),
+        headers: {
+          'Content-Type': 'application/octet-stream',
+          'Prediction-Key': _predictionKey,
+        },
+        body: bytes,
+      );
 
-      setState(() {
-        _labels = labels;
-        _isProcessing = false;
-      });
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> result = jsonDecode(response.body);
+        // Assuming you used a classification project
+        if (result['predictions'] != null && result['predictions'].isNotEmpty) {
+          final topPrediction = result['predictions'][0];
+          setState(() {
+            _predictedLabel = topPrediction['tagName'];
+            _confidence = topPrediction['probability'];
+          });
+        }
+      } else {
+        debugPrint('Prediction API error: ${response.statusCode} ${response.body}');
+      }
 
-      await labeler.close();
+      setState(() => _isProcessing = false);
     } catch (e) {
-      debugPrint('Error capturing or processing image: $e');
+      debugPrint('Error capturing or predicting image: $e');
       setState(() => _isProcessing = false);
     }
   }
@@ -124,25 +147,22 @@ class _CameraScanScreenState extends State<CameraScanScreen> {
                             : Image.file(File(_capturedImage!.path)),
                       ),
 
-                      // ML Kit label results
+                      // Azure prediction results
                       if (_isProcessing)
                         const Padding(
                           padding: EdgeInsets.all(8.0),
                           child: CircularProgressIndicator(),
                         )
-                      else if (_labels.isNotEmpty)
-                        Expanded(
-                          flex: 2,
-                          child: ListView.builder(
-                            itemCount: _labels.length,
-                            itemBuilder: (context, index) {
-                              final label = _labels[index];
-                              return ListTile(
-                                title: Text(label.label),
-                                subtitle: Text(
-                                    'Confidence: ${(label.confidence * 100).toStringAsFixed(1)}%'),
-                              );
-                            },
+                      else if (_predictedLabel != null)
+                        Padding(
+                          padding: const EdgeInsets.all(8.0),
+                          child: Text(
+                            'Prediction: $_predictedLabel\nConfidence: ${(_confidence! * 100).toStringAsFixed(1)}%',
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            textAlign: TextAlign.center,
                           ),
                         ),
 
@@ -150,9 +170,9 @@ class _CameraScanScreenState extends State<CameraScanScreen> {
                       Padding(
                         padding: const EdgeInsets.all(16.0),
                         child: ElevatedButton.icon(
-                          onPressed: _captureAndDetect,
+                          onPressed: _captureAndPredict,
                           icon: const Icon(Icons.camera_alt),
-                          label: const Text('Capture & Detect'),
+                          label: const Text('Capture & Predict'),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.teal.shade700,
                             foregroundColor: Colors.white,
