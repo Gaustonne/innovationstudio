@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../../common/db/models/ingredient.dart';
 import '../../receipt_scanner/receipt_scanner_screen.dart';
+import 'barcode_scanner_screen.dart';
 
 /// Result returned by the editor screen to indicate a save or delete action.
 class EditResult {
@@ -51,6 +52,34 @@ class _AddIngredientScreenState extends State<AddIngredientScreen> {
         _weightController.text = firstItem.weightKg.toString();
         _selectedDate = firstItem.expiry;
       });
+    }
+  }
+
+  Future<void> _scanBarcode() async {
+    final BarcodeScannerResult? result = await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const BarcodeScannerScreen()),
+    );
+
+    if (result != null) {
+      if (result.suggestedIngredient != null) {
+        // Product found - populate fields with suggested data
+        final suggested = result.suggestedIngredient!;
+        setState(() {
+          _nameController.text = suggested.name;
+          _quantityController.text = suggested.quantity.toString();
+          _weightController.text = suggested.weightKg.toString();
+          _selectedDate = suggested.expiry;
+        });
+      } else {
+        // Product not found - just populate name field with barcode for manual entry
+        setState(() {
+          _nameController.text = 'Product ${result.barcode}';
+          // Keep existing values for other fields
+          if (_selectedDate == null) {
+            _selectedDate = DateTime.now().add(const Duration(days: 7));
+          }
+        });
+      }
     }
   }
 
@@ -132,6 +161,11 @@ class _AddIngredientScreenState extends State<AddIngredientScreen> {
             icon: const Icon(Icons.camera_alt),
             onPressed: _scanReceipt,
             tooltip: 'Scan Receipt',
+          ),
+          IconButton(
+            icon: const Icon(Icons.qr_code_scanner),
+            onPressed: _scanBarcode,
+            tooltip: 'Scan Barcode',
           ),
         ],
       ),
