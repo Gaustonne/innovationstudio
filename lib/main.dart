@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'features/inventory/presentation/inventory.dart';
 
-void main() {
+Future<void> main() async {
+  // Load environment variables from .env (ignored in VCS)
+  await dotenv.load();
   runApp(const MyApp());
 }
 

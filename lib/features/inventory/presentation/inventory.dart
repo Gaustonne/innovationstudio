@@ -23,6 +23,10 @@ final ValueNotifier<InventoryPage> activePageNotifier = ValueNotifier(
   InventoryPage.main,
 );
 
+/// Simple notifier other parts of the app can toggle to request the inventory
+/// UI reload its data from the DB. Increment the value to trigger a reload.
+final ValueNotifier<int> inventoryRefreshNotifier = ValueNotifier<int>(0);
+
 class InventoryHomePage extends StatefulWidget {
   const InventoryHomePage({super.key});
 
@@ -105,6 +109,13 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
     activePageNotifier.value = _history.last;
     _loadData();
     _loadPreferences();
+    // react to external refresh requests
+    inventoryRefreshNotifier.addListener(_onInventoryRefreshRequested);
+  }
+
+  void _onInventoryRefreshRequested() {
+    // simply reload data when notifier changes
+    _loadData();
 
     // Listen for cross-screen reload requests (e.g., log waste / undo)
     _eventsListener = () {
@@ -117,6 +128,7 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
   @override
   void dispose() {
     AppEvents.instance.reloadTick.removeListener(_eventsListener);
+    inventoryRefreshNotifier.removeListener(_onInventoryRefreshRequested);
     super.dispose();
   }
 
@@ -140,7 +152,8 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
           shopping[i] = item.copyWith(
             priceOptions: prices,
             selectedStore:
-                item.selectedStore ?? (prices.isNotEmpty ? prices.first.store : null),
+                item.selectedStore ??
+                (prices.isNotEmpty ? prices.first.store : null),
           );
           await _shoppingListStore.update(shopping[i]);
         }
@@ -154,8 +167,7 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
         ..clear()
         ..addAll(shopping);
       // keep _wastedItems only for legacy constructor; not used for count
-      _wastedItems
-        ..clear();
+      _wastedItems..clear();
     });
   }
 
@@ -348,20 +360,21 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
               final titleText = active == InventoryPage.main
                   ? 'Kitchen Inventory'
                   : active == InventoryPage.expired
-                      ? 'Expired items'
-                      : active == InventoryPage.wasted
-                          ? 'Wasted items'
-                          : active == InventoryPage.recipes
-                              ? 'Recipes'
-                              : 'Shopping List';
+                  ? 'Expired items'
+                  : active == InventoryPage.wasted
+                  ? 'Wasted items'
+                  : active == InventoryPage.recipes
+                  ? 'Recipes'
+                  : 'Shopping List';
               return Text(titleText, style: titleStyle);
             },
           ),
           backgroundColor: Theme.of(context).colorScheme.primary,
           actions: [
             IconButton(
-              tooltip:
-                  _sortByExpiry ? 'Sort alphabetically' : 'Sort by nearest expiry',
+              tooltip: _sortByExpiry
+                  ? 'Sort alphabetically'
+                  : 'Sort by nearest expiry',
               icon: Icon(_sortByExpiry ? Icons.schedule : Icons.sort_by_alpha),
               onPressed: () => setState(() => _sortByExpiry = !_sortByExpiry),
               color: Theme.of(context).colorScheme.onPrimary,
@@ -399,11 +412,14 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
             onSeed: () async {
               Navigator.of(ctx).pop();
               final messenger = ScaffoldMessenger.of(context);
-              final confirmed = await showDialog<bool>(
+              final confirmed =
+                  await showDialog<bool>(
                     context: context,
                     builder: (dctx) => AlertDialog(
                       title: const Text('Seed database?'),
-                      content: const Text('This will replace the app DB with sample data.'),
+                      content: const Text(
+                        'This will replace the app DB with sample data.',
+                      ),
                       actions: [
                         TextButton(
                           onPressed: () => Navigator.of(dctx).pop(false),
@@ -438,9 +454,12 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
                     Row(
                       children: [
                         FilterChip(
-                          label: Text('Expiring within 7 days ($expiringCount)'),
+                          label: Text(
+                            'Expiring within 7 days ($expiringCount)',
+                          ),
                           selected: _filterNext7Days,
-                          onSelected: (v) => setState(() => _filterNext7Days = v),
+                          onSelected: (v) =>
+                              setState(() => _filterNext7Days = v),
                         ),
                         const SizedBox(width: 8),
                         FilterChip(
@@ -469,26 +488,38 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
                             background: Container(
                               color: Colors.green,
                               alignment: Alignment.centerLeft,
-                              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16.0,
+                              ),
                               child: Row(
                                 children: const [
                                   Icon(Icons.update, color: Colors.white),
                                   SizedBox(width: 8),
-                                  Text('Add 3 days', style: TextStyle(color: Colors.white)),
+                                  Text(
+                                    'Add 3 days',
+                                    style: TextStyle(color: Colors.white),
+                                  ),
                                 ],
                               ),
                             ),
                             secondaryBackground: Container(
                               color: Colors.red,
                               alignment: Alignment.centerRight,
-                              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16.0,
+                              ),
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: const [
-                                  Text('Send to wasted',
-                                      style: TextStyle(color: Colors.white)),
+                                  Text(
+                                    'Send to wasted',
+                                    style: TextStyle(color: Colors.white),
+                                  ),
                                   SizedBox(width: 8),
-                                  Icon(Icons.delete_forever, color: Colors.white),
+                                  Icon(
+                                    Icons.delete_forever,
+                                    color: Colors.white,
+                                  ),
                                 ],
                               ),
                             ),
@@ -496,24 +527,32 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
                               if (direction == DismissDirection.startToEnd) {
                                 _addDaysToItem(item, 3);
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text('Extended "${item.name}" by 3 days')),
+                                  SnackBar(
+                                    content: Text(
+                                      'Extended "${item.name}" by 3 days',
+                                    ),
+                                  ),
                                 );
                                 return false;
                               } else {
                                 final messenger = ScaffoldMessenger.of(context);
-                                final confirmed = await showDialog<bool>(
+                                final confirmed =
+                                    await showDialog<bool>(
                                       context: context,
                                       builder: (ctx) => AlertDialog(
                                         title: const Text('Send to wasted?'),
-                                        content:
-                                            Text('Move "${item.name}" to wasted items?'),
+                                        content: Text(
+                                          'Move "${item.name}" to wasted items?',
+                                        ),
                                         actions: [
                                           TextButton(
-                                            onPressed: () => Navigator.of(ctx).pop(false),
+                                            onPressed: () =>
+                                                Navigator.of(ctx).pop(false),
                                             child: const Text('Cancel'),
                                           ),
                                           TextButton(
-                                            onPressed: () => Navigator.of(ctx).pop(true),
+                                            onPressed: () =>
+                                                Navigator.of(ctx).pop(true),
                                             child: const Text('Yes'),
                                           ),
                                         ],
@@ -526,7 +565,8 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
                                   messenger.showSnackBar(
                                     SnackBar(
                                       content: Text(
-                                          'Moved "${item.name}" to wasted items'),
+                                        'Moved "${item.name}" to wasted items',
+                                      ),
                                     ),
                                   );
                                   return true;
@@ -535,7 +575,8 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
                               }
                             },
                             child: InkWell(
-                              onTap: () => _handleAddOrEditFromScreen(existing: item),
+                              onTap: () =>
+                                  _handleAddOrEditFromScreen(existing: item),
                               child: ItemCard(item: item),
                             ),
                           );
