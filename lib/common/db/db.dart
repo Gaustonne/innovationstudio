@@ -5,7 +5,7 @@ import 'package:path/path.dart';
 
 class AppDatabase {
   static const _dbName = 'inventory.db';
-  static const _dbVersion = 2;
+  static const _dbVersion = 4; // bump to force migration
 
   static Database? _instance;
 
@@ -13,13 +13,10 @@ class AppDatabase {
 
   static Future<Database> get instance async {
     if (_instance != null) return _instance!;
-    // For web we must use the ffi web factory and avoid getDatabasesPath()
     String path;
     if (kIsWeb) {
-      // Change default factory on the web
       databaseFactory = databaseFactoryFfiWeb;
-      // Use a simple filename on web (sqflite_ffi_web uses indexedDB under the hood)
-      path = _dbName;
+      path = _dbName; // IndexedDB key
     } else {
       final databasesPath = await getDatabasesPath();
       path = join(databasesPath, _dbName);
@@ -32,21 +29,21 @@ class AppDatabase {
         await _createTables(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
+        // v1 -> v2: add shopping_list + wasted extras
         if (oldVersion < 2) {
-          await db.execute('DROP TABLE IF EXISTS shopping_list');
-          await db.execute('''
-            CREATE TABLE shopping_list (
-              id TEXT PRIMARY KEY,
-              name TEXT NOT NULL,
-              quantity REAL NOT NULL,
-              unit TEXT NOT NULL,
-              status TEXT NOT NULL,
-              category TEXT,
-              fromRecipe TEXT,
-              priceOptions TEXT,
-              selectedStore TEXT
-            )
-          ''');
+          await _ensureShoppingList(db);
+          await _ensureWastedExtras(db);
+        }
+        // v2 -> v3: add origExpiry to wasted
+        if (oldVersion < 3) {
+          await _ensureOrigExpiry(db);
+        }
+        // v3 -> v4: safety pass to ensure everything exists
+        if (oldVersion < 4) {
+          await _ensureShoppingList(db);
+          await _ensureWastedTable(db);
+          await _ensureWastedExtras(db);
+          await _ensureOrigExpiry(db);
         }
       },
     );
@@ -56,7 +53,7 @@ class AppDatabase {
 
   static Future<void> _createTables(Database db) async {
     await db.execute('''
-      CREATE TABLE inventory (
+      CREATE TABLE IF NOT EXISTS inventory (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
         quantity INTEGER NOT NULL,
@@ -65,19 +62,12 @@ class AppDatabase {
       )
     ''');
 
-    await db.execute('''
-      CREATE TABLE wasted (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        quantity INTEGER NOT NULL,
-        weightKg REAL NOT NULL,
-        expiry TEXT NOT NULL,
-        movedAt TEXT NOT NULL
-      )
-    ''');
+    await _ensureWastedTable(db);
+    await _ensureWastedExtras(db);
+    await _ensureOrigExpiry(db);
 
     await db.execute('''
-      CREATE TABLE meal_plans (
+      CREATE TABLE IF NOT EXISTS meal_plans (
         id TEXT PRIMARY KEY,
         title TEXT NOT NULL,
         description TEXT,
@@ -88,7 +78,7 @@ class AppDatabase {
     ''');
 
     await db.execute('''
-      CREATE TABLE meal_plan_ingredients (
+      CREATE TABLE IF NOT EXISTS meal_plan_ingredients (
         id TEXT PRIMARY KEY,
         ingredientId TEXT NOT NULL,
         mealPlanId TEXT NOT NULL,
@@ -101,7 +91,7 @@ class AppDatabase {
     ''');
 
     await db.execute('''
-      CREATE TABLE recipes (
+      CREATE TABLE IF NOT EXISTS recipes (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
         cookTimeMinutes INTEGER NOT NULL,
@@ -111,7 +101,7 @@ class AppDatabase {
     ''');
 
     await db.execute('''
-      CREATE TABLE recipe_ingredients (
+      CREATE TABLE IF NOT EXISTS recipe_ingredients (
         id TEXT PRIMARY KEY,
         recipeId TEXT NOT NULL,
         name TEXT NOT NULL,
@@ -119,8 +109,38 @@ class AppDatabase {
       )
     ''');
 
+    await _ensureShoppingList(db);
+  }
+
+  // --- helpers to (idempotently) ensure schema pieces exist ---
+
+  static Future<void> _ensureWastedTable(Database db) async {
     await db.execute('''
-      CREATE TABLE shopping_list (
+      CREATE TABLE IF NOT EXISTS wasted (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        quantity REAL,
+        unit TEXT,
+        weightKg REAL,
+        movedAt INTEGER NOT NULL
+      )
+    ''');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_wasted_movedAt ON wasted(movedAt)');
+  }
+
+  static Future<void> _ensureWastedExtras(Database db) async {
+    // Reason + estValue (ignore if already exists)
+    try { await db.execute('ALTER TABLE wasted ADD COLUMN reason TEXT'); } catch (_) {}
+    try { await db.execute('ALTER TABLE wasted ADD COLUMN estValue REAL'); } catch (_) {}
+  }
+
+  static Future<void> _ensureOrigExpiry(Database db) async {
+    try { await db.execute('ALTER TABLE wasted ADD COLUMN origExpiry TEXT'); } catch (_) {}
+  }
+
+  static Future<void> _ensureShoppingList(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS shopping_list (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
         quantity REAL NOT NULL,

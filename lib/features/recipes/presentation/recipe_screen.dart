@@ -5,6 +5,10 @@ import '../domain/recipe.dart';
 import '../domain/recipe_data.dart';
 import '../../../common/db/models/ingredient.dart';
 
+// NEW: cook flow
+import '../../../common/services/cook_service.dart';
+import 'cook_dialog.dart';
+
 class RecipeScreen extends StatefulWidget {
   final List<Ingredient> userIngredients;
 
@@ -71,19 +75,52 @@ class _RecipeScreenState extends State<RecipeScreen> {
       filteredRecipes.sort((a, b) {
         final matchedA = a.extra?['matchedCount'] as int? ?? 0;
         final matchedB = b.extra?['matchedCount'] as int? ?? 0;
-        
-        // Sort by most matched ingredients first
+
         if (matchedA != matchedB) {
           return matchedB.compareTo(matchedA);
         }
 
-        // If matched counts are equal, sort by least missing ingredients
         final missingA = (a.extra?['missingIngredients'] as List?)?.length ?? 0;
         final missingB = (b.extra?['missingIngredients'] as List?)?.length ?? 0;
         return missingA.compareTo(missingB);
       });
     });
   }
+
+  // ===== NEW: handler to mark a recipe as cooked =====
+  Future<void> _onMarkCooked(BuildContext context, Recipe recipe) async {
+    // Use recipe ingredients as suggestions in the dialog
+    final suggestions = recipe.ingredients;
+
+    final res = await showDialog<CookDialogResult>(
+      context: context,
+      builder: (_) => CookDialog(suggestions: suggestions),
+    );
+
+    if (!mounted || res == null) return;
+
+    final applied = res.result.applied;
+    final shortages = res.result.shortages;
+
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.clearSnackBars();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          shortages.isEmpty
+              ? 'Cooked! Deducted ${applied.length} item(s).'
+              : 'Cooked! Deducted ${applied.length}. Shortages: ${shortages.keys.join(", ")}',
+        ),
+        action: SnackBarAction(
+          label: 'Undo',
+          onPressed: () async {
+            await CookService().undo(applied);
+          },
+        ),
+      ),
+    );
+  }
+  // ===================================================
 
   @override
   Widget build(BuildContext context) {
@@ -179,7 +216,8 @@ class _RecipeScreenState extends State<RecipeScreen> {
                                 Text('Diet: ${recipe.ruleType}'),
                                 if (missing.isNotEmpty)
                                   Text(
-                                    'Missing Ingredients: ${missing.join(', ')} (Matched: $matchedCount/${recipe.ingredients.length})',
+                                    'Missing Ingredients: ${missing.join(', ')} '
+                                    '(Matched: $matchedCount/${recipe.ingredients.length})',
                                   ),
                                 if (missing.isNotEmpty)
                                   ElevatedButton(
@@ -203,6 +241,12 @@ class _RecipeScreenState extends State<RecipeScreen> {
                                     child: const Text('Add Missing to Shopping List'),
                                   ),
                               ],
+                            ),
+                            // NEW: Mark as cooked button
+                            trailing: IconButton(
+                              tooltip: 'Mark as cooked',
+                              icon: const Icon(Icons.restaurant_menu_outlined),
+                              onPressed: () => _onMarkCooked(context, recipe),
                             ),
                           ),
                         );
