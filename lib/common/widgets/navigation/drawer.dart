@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../../../features/inventory/presentation/inventory.dart'
     show InventoryPage;
+import '../../../features/camera_scanner/camera_scan_screen.dart';
 
 typedef PageCallback = void Function();
 
@@ -78,6 +79,19 @@ class AppDrawer extends StatelessWidget {
               title: const Text('Shopping List'),
               selected: activePage == InventoryPage.shoppingList,
               onTap: onShoppingList,
+            ),
+            ListTile(
+              leading: const Icon(Icons.camera_alt),
+              title: const Text('Camera Scanner'),
+              onTap: () {
+                Navigator.pop(context); // Close drawer
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const CameraScanScreen(),
+                  ),
+                );
+              },
             ),
             // Debug-only seed action
             if (kDebugMode && onSeed != null)
