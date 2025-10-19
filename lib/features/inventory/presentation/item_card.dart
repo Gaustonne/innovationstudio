@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
+
 import '../../../common/db/models/ingredient.dart';
 import '../../../common/utils/date_utils.dart';
+
+// NEW imports for the action:
+import '../../../common/db/collections/wasted_store.dart';
+import '../../../common/db/collections/inventory_store.dart';
 
 class ItemCard extends StatelessWidget {
   final Ingredient item;
@@ -15,6 +20,7 @@ class ItemCard extends StatelessWidget {
         .map((s) => s.isNotEmpty ? s[0] : '')
         .take(2)
         .join();
+
     return Card(
       color: isExpiredView ? Colors.grey.shade100 : null,
       margin: const EdgeInsets.symmetric(vertical: 8.0),
@@ -65,7 +71,69 @@ class ItemCard extends StatelessWidget {
                 ],
               ),
             ),
-            const Icon(Icons.chevron_right),
+
+            // Actions: 3-dot menu + your existing chevron
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                PopupMenuButton<String>(
+                  tooltip: 'More actions',
+                  onSelected: (value) async {
+                    if (value == 'waste') {
+                      // Ask if the user also wants to remove it from inventory
+                      final removeFromInventory = await showDialog<bool>(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          title: const Text('Throw away item'),
+                          content: const Text(
+                            'Move this item to Wasted? You can also choose to remove it from inventory.',
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(ctx, false),
+                              child: const Text('Just record waste'),
+                            ),
+                            FilledButton(
+                              onPressed: () => Navigator.pop(ctx, true),
+                              child: const Text('Record & remove'),
+                            ),
+                          ],
+                        ),
+                      );
+
+                      // 1) Always record in the wasted table
+                      await WastedStore().insert(item);
+
+                      // 2) Optionally remove from inventory
+                      if (removeFromInventory == true) {
+                        try {
+                          await InventoryStore().delete(item.id);
+                        } catch (_) {
+                          // If your Ingredient model doesn't expose id, drop this or adapt.
+                        }
+                      }
+
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(removeFromInventory == true
+                                ? 'Item moved to Wasted and removed from inventory'
+                                : 'Item recorded in Wasted'),
+                          ),
+                        );
+                      }
+                    }
+                  },
+                  itemBuilder: (context) => const [
+                    PopupMenuItem(
+                      value: 'waste',
+                      child: Text('Throw away'),
+                    ),
+                  ],
+                ),
+                const Icon(Icons.chevron_right),
+              ],
+            ),
           ],
         ),
       ),

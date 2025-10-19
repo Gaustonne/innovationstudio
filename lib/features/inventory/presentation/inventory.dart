@@ -14,8 +14,10 @@ import 'expired.dart';
 import 'wasted.dart';
 import 'item_card.dart';
 import 'add_item.dart';
+import 'waste_charts_screen.dart'; // NEW
 
-enum InventoryPage { main, expired, wasted, recipes, shoppingList }
+// EXTENDED: add wasteCharts
+enum InventoryPage { main, expired, wasted, wasteCharts, recipes, shoppingList }
 
 /// Global notifier to persist which page is active across routes.
 final ValueNotifier<InventoryPage> activePageNotifier = ValueNotifier(
@@ -39,7 +41,7 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
 
   // Wasted items list (in-memory)
   final List<Ingredient> _wastedItems = [];
-  
+
   // Shopping list items (in-memory)
   final List<ShoppingListItem> _shoppingList = [];
 
@@ -84,7 +86,7 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
       items.sort((a, b) => a.expiry.compareTo(b.expiry));
     } else {
       items.sort(
-        (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+            (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
       );
     }
 
@@ -119,7 +121,8 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
           final prices = await _pricingService.getPriceOptions(item.name);
           shopping[i] = item.copyWith(
             priceOptions: prices,
-            selectedStore: item.selectedStore ?? (prices.isNotEmpty ? prices.first.store : null),
+            selectedStore:
+            item.selectedStore ?? (prices.isNotEmpty ? prices.first.store : null),
           );
           await _shoppingListStore.update(shopping[i]);
         }
@@ -316,6 +319,8 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
                   ? 'Expired items'
                   : active == InventoryPage.wasted
                   ? 'Wasted items'
+                  : active == InventoryPage.wasteCharts
+                  ? 'Waste insights'
                   : active == InventoryPage.recipes
                   ? 'Recipes'
                   : 'Shopping List';
@@ -325,9 +330,8 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
           backgroundColor: Theme.of(context).colorScheme.primary,
           actions: [
             IconButton(
-              tooltip: _sortByExpiry
-                  ? 'Sort alphabetically'
-                  : 'Sort by nearest expiry',
+              tooltip:
+              _sortByExpiry ? 'Sort alphabetically' : 'Sort by nearest expiry',
               icon: Icon(_sortByExpiry ? Icons.schedule : Icons.sort_by_alpha),
               onPressed: () => setState(() => _sortByExpiry = !_sortByExpiry),
               color: Theme.of(context).colorScheme.onPrimary,
@@ -354,6 +358,10 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
               _pushPage(InventoryPage.wasted);
               Navigator.of(ctx).pop();
             },
+            onWasteCharts: () { // NEW
+              _pushPage(InventoryPage.wasteCharts);
+              Navigator.of(ctx).pop();
+            },
             onRecipes: () {
               _pushPage(InventoryPage.recipes);
               Navigator.of(ctx).pop();
@@ -370,9 +378,8 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
                 context: context,
                 builder: (dctx) => AlertDialog(
                   title: const Text('Seed database?'),
-                  content: const Text(
-                    'This will replace the app DB with sample data.',
-                  ),
+                  content:
+                  const Text('This will replace the app DB with sample data.'),
                   actions: [
                     TextButton(
                       onPressed: () => Navigator.of(dctx).pop(false),
@@ -399,6 +406,7 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
           builder: (context, active, _) {
             Widget child;
             if (active == InventoryPage.main) {
+              // Your original main page (kept intact so ItemCard is used)
               child = Padding(
                 padding: const EdgeInsets.all(12.0),
                 child: Column(
@@ -410,8 +418,7 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
                             'Expiring within 7 days ($expiringCount)',
                           ),
                           selected: _filterNext7Days,
-                          onSelected: (v) =>
-                              setState(() => _filterNext7Days = v),
+                          onSelected: (v) => setState(() => _filterNext7Days = v),
                         ),
                         const SizedBox(width: 8),
                         FilterChip(
@@ -488,29 +495,29 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
                                 return false;
                               } else {
                                 // Capture messenger before awaiting dialog
-                                final messenger = ScaffoldMessenger.of(context);
-                                final confirmed =
-                                    await showDialog<bool>(
-                                      context: context,
-                                      builder: (ctx) => AlertDialog(
-                                        title: const Text('Send to wasted?'),
-                                        content: Text(
-                                          'Move "${item.name}" to wasted items?',
-                                        ),
-                                        actions: [
-                                          TextButton(
-                                            onPressed: () =>
-                                                Navigator.of(ctx).pop(false),
-                                            child: const Text('Cancel'),
-                                          ),
-                                          TextButton(
-                                            onPressed: () =>
-                                                Navigator.of(ctx).pop(true),
-                                            child: const Text('Yes'),
-                                          ),
-                                        ],
+                                final messenger =
+                                ScaffoldMessenger.of(context);
+                                final confirmed = await showDialog<bool>(
+                                  context: context,
+                                  builder: (ctx) => AlertDialog(
+                                    title: const Text('Send to wasted?'),
+                                    content: Text(
+                                      'Move "${item.name}" to wasted items?',
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () =>
+                                            Navigator.of(ctx).pop(false),
+                                        child: const Text('Cancel'),
                                       ),
-                                    ) ??
+                                      TextButton(
+                                        onPressed: () =>
+                                            Navigator.of(ctx).pop(true),
+                                        child: const Text('Yes'),
+                                      ),
+                                    ],
+                                  ),
+                                ) ??
                                     false;
 
                                 if (confirmed) {
@@ -540,6 +547,9 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
                 ),
               );
             } else if (active == InventoryPage.expired) {
+              final expiredItems =
+              _items.where((i) => _isExpired(i.expiry)).toList()
+                ..sort((a, b) => a.expiry.compareTo(b.expiry));
               child = ExpiredItemsPage(
                 items: expiredItems,
                 onAddDays: (item) => _addDaysToItem(item, 3),
@@ -550,6 +560,8 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
               );
             } else if (active == InventoryPage.wasted) {
               child = WastedItemsPage(items: _wastedItems);
+            } else if (active == InventoryPage.wasteCharts) {
+              child = const WasteChartsScreen(); // NEW
             } else if (active == InventoryPage.recipes) {
               child = RecipeScreen(userIngredients: _items);
             } else if (active == InventoryPage.shoppingList) {
@@ -576,7 +588,7 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
                 onRefresh: () => _loadData(fetchPrices: true),
               );
             } else {
-              child = Container();
+              child = const SizedBox.shrink();
             }
 
             return AnimatedSwitcher(
@@ -595,3 +607,4 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
     );
   }
 }
+
