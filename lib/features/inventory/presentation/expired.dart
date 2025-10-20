@@ -87,11 +87,6 @@ class ExpiredItemsPage extends StatelessWidget {
 
                 if (confirmed) {
                   onWaste(item);
-                  messenger.showSnackBar(
-                    SnackBar(
-                      content: Text('Moved "${item.name}" to wasted items'),
-                    ),
-                  );
                   return true;
                 }
                 return false;

@@ -4,7 +4,7 @@ import '../../../common/services/app_events.dart';
 import '../../../common/db/collections/wasted_store.dart';
 import '../../../common/db/models/wasted_item.dart';
 import '../../../common/db/collections/inventory_store.dart';
-import '../../../common/db/models/wasted_item_extension.dart'; // toIngredient()
+// import '../../../common/db/models/wasted_item_extension.dart'; // toIngredient()
 import '../../wasted/presentation/waste_log_form.dart';
 
 enum _SortMode { newestFirst, valueHighLow, nameAZ }
@@ -26,7 +26,13 @@ class _WastedItemsPageState extends State<WastedItemsPage> {
   String? _reasonFilter;
   _SortMode _sortMode = _SortMode.newestFirst;
 
-  static const _reasons = ['Expired', 'Spoiled', 'Leftovers', 'Overbought', 'Other'];
+  static const _reasons = [
+    'Expired',
+    'Spoiled',
+    'Leftovers',
+    'Overbought',
+    'Other',
+  ];
 
   @override
   void initState() {
@@ -57,8 +63,12 @@ class _WastedItemsPageState extends State<WastedItemsPage> {
     var list = _reasonFilter == null
         ? List<WastedItem>.from(_all)
         : _all
-            .where((w) => (w.reason ?? '').toLowerCase() == _reasonFilter!.toLowerCase())
-            .toList();
+              .where(
+                (w) =>
+                    (w.reason ?? '').toLowerCase() ==
+                    _reasonFilter!.toLowerCase(),
+              )
+              .toList();
 
     switch (_sortMode) {
       case _SortMode.newestFirst:
@@ -68,7 +78,9 @@ class _WastedItemsPageState extends State<WastedItemsPage> {
         list.sort((a, b) => (b.estValue ?? 0).compareTo(a.estValue ?? 0));
         break;
       case _SortMode.nameAZ:
-        list.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+        list.sort(
+          (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+        );
         break;
     }
 
@@ -80,36 +92,42 @@ class _WastedItemsPageState extends State<WastedItemsPage> {
   /// Applies a quantity delta to the matching inventory item by **name**.
   /// If no item exists and [delta] > 0 (i.e., we’re restoring), we insert one
   /// using the wasted row’s details (preserves `origExpiry` via toIngredient()).
-  Future<void> _applyInventoryDeltaFor(WastedItem w, {required int delta}) async {
-  final invStore = InventoryStore();
-  final inv = await invStore.getAll();
+  Future<void> _applyInventoryDeltaFor(
+    WastedItem w, {
+    required int delta,
+  }) async {
+    final invStore = InventoryStore();
+    final inv = await invStore.getAll();
 
-  final idx = inv.indexWhere(
-    (i) => i.name.toLowerCase().trim() == w.name.toLowerCase().trim(),
-  );
+    final idx = inv.indexWhere(
+      (i) => i.name.toLowerCase().trim() == w.name.toLowerCase().trim(),
+    );
 
-  if (idx == -1) {
-    // Not found: only insert on positive delta (undo)
-    if (delta > 0) {
-      await invStore.insert(w.toIngredient());
+    if (idx == -1) {
+      // Not found: only insert on positive delta (undo)
+      if (delta > 0) {
+        await invStore.insert(w.toIngredient());
+      }
+      return;
     }
-    return;
-  }
 
-  final current = inv[idx];
-  final newQty = current.quantity + delta;  // delta can be negative
+    final current = inv[idx];
+    final newQty = current.quantity + delta; // delta can be negative
 
-  if (newQty <= 0) {
-    await invStore.delete(current.id);
-  } else {
-    await invStore.update(current.copyWith(quantity: newQty));
+    if (newQty <= 0) {
+      await invStore.delete(current.id);
+    } else {
+      await invStore.update(current.copyWith(quantity: newQty));
+    }
   }
-}
 
   // ---- actions -------------------------------------------------------------
 
   Future<void> _openLogWaste() async {
-    final res = await showDialog(context: context, builder: (_) => const WasteLogForm());
+    final res = await showDialog(
+      context: context,
+      builder: (_) => const WasteLogForm(),
+    );
     if (res is! WasteLogResult) return;
 
     // Only allow logging if the item exists in inventory (as you requested).
@@ -121,7 +139,9 @@ class _WastedItemsPageState extends State<WastedItemsPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('You can only log waste for items that exist in your inventory.'),
+          content: Text(
+            'You can only log waste for items that exist in your inventory.',
+          ),
           backgroundColor: Colors.redAccent,
         ),
       );
@@ -140,9 +160,9 @@ class _WastedItemsPageState extends State<WastedItemsPage> {
     await _reloadAll();
     AppEvents.instance.requestReloadAll();
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Logged: ${res.item.name}')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('Logged: ${res.item.name}')));
   }
 
   Future<void> _restoreToInventory(WastedItem item) async {
@@ -164,9 +184,9 @@ class _WastedItemsPageState extends State<WastedItemsPage> {
       );
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error restoring item: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error restoring item: $e')));
       }
     }
   }
@@ -217,8 +237,14 @@ class _WastedItemsPageState extends State<WastedItemsPage> {
             initialValue: _sortMode,
             onSelected: _setSortMode,
             itemBuilder: (context) => const [
-              PopupMenuItem(value: _SortMode.newestFirst, child: Text('Newest → Oldest')),
-              PopupMenuItem(value: _SortMode.valueHighLow, child: Text('Highest \$ → Lowest \$')),
+              PopupMenuItem(
+                value: _SortMode.newestFirst,
+                child: Text('Newest → Oldest'),
+              ),
+              PopupMenuItem(
+                value: _SortMode.valueHighLow,
+                child: Text('Highest \$ → Lowest \$'),
+              ),
               PopupMenuItem(value: _SortMode.nameAZ, child: Text('Name A → Z')),
             ],
           ),
@@ -287,9 +313,13 @@ class _WastedItemsPageState extends State<WastedItemsPage> {
                         itemBuilder: (context, i) {
                           final w = _displayed[i];
                           final parts = <String>[];
-                          if (w.quantity != null) parts.add('${w.quantity} ${w.unit ?? ''}'.trim());
-                          if ((w.reason ?? '').isNotEmpty) parts.add('Reason: ${w.reason}');
-                          parts.add('When: ${w.movedAt.toLocal().toString().split(".").first}');
+                          if (w.quantity != null)
+                            parts.add('${w.quantity} ${w.unit ?? ''}'.trim());
+                          if ((w.reason ?? '').isNotEmpty)
+                            parts.add('Reason: ${w.reason}');
+                          parts.add(
+                            'When: ${w.movedAt.toLocal().toString().split(".").first}',
+                          );
 
                           return ListTile(
                             leading: const Icon(Icons.delete_outline),

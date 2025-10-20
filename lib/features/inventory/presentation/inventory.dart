@@ -535,7 +535,6 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
                                 );
                                 return false;
                               } else {
-                                final messenger = ScaffoldMessenger.of(context);
                                 final confirmed =
                                     await showDialog<bool>(
                                       context: context,
@@ -562,13 +561,6 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
 
                                 if (confirmed) {
                                   _moveToWasted(item);
-                                  messenger.showSnackBar(
-                                    SnackBar(
-                                      content: Text(
-                                        'Moved "${item.name}" to wasted items',
-                                      ),
-                                    ),
-                                  );
                                   return true;
                                 }
                                 return false;
