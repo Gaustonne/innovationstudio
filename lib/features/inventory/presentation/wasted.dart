@@ -6,6 +6,7 @@ import '../../../common/db/models/wasted_item.dart';
 import '../../../common/db/collections/inventory_store.dart';
 // import '../../../common/db/models/wasted_item_extension.dart'; // toIngredient()
 import '../../wasted/presentation/waste_log_form.dart';
+import 'waste_charts_screen.dart';
 
 enum _SortMode { newestFirst, valueHighLow, nameAZ }
 
@@ -281,6 +282,23 @@ class _WastedItemsPageState extends State<WastedItemsPage> {
                       Text('Last 7 days: ${_weekly!.itemCount} discarded'),
                       const Spacer(),
                       Text('\$${_weekly!.totalValue.toStringAsFixed(2)}'),
+                      const SizedBox(width: 8),
+                      OutlinedButton.icon(
+                        onPressed: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const WasteChartsScreen(),
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.insights_outlined),
+                        label: const Text('Charts'),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                          minimumSize: Size.zero,
+                          textStyle: const TextStyle(fontSize: 12),
+                        ),
+                      ),
                     ],
                   ),
                 ),

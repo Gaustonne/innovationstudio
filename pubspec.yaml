@@ -49,6 +49,9 @@ dependencies:
   google_mlkit_text_recognition: ^0.15.0
   mobile_scanner: ^5.0.0
   flutter_dotenv: ^5.0.2
+  
+  # Charts for waste analytics
+  fl_chart: ^0.66.2
 
 dev_dependencies:
   flutter_test:
