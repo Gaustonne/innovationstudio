@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:mobile_scanner/mobile_scanner.dart' as scanner;
 import '../../../common/services/barcode_service.dart';
 import '../../../common/db/models/ingredient.dart';
 
@@ -23,7 +23,7 @@ class BarcodeScannerScreen extends StatefulWidget {
 }
 
 class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
-  final MobileScannerController _controller = MobileScannerController();
+  final scanner.MobileScannerController _controller = scanner.MobileScannerController();
   final BarcodeService _barcodeService = BarcodeService();
   
   bool _isProcessing = false;
@@ -36,7 +36,7 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
     super.dispose();
   }
 
-  Future<void> _processBarcode(String barcode) async {
+  Future<void> _processBarcode(String barcode, {String? rawBarcodeData}) async {
     if (_isProcessing || _hasScanned || barcode == _lastScannedBarcode) {
       return;
     }
@@ -72,8 +72,8 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
         );
       }
 
-      // Lookup product information
-      final productInfo = await _barcodeService.lookupProduct(barcode);
+      // Lookup product information with raw barcode data for 2D codes
+      final productInfo = await _barcodeService.lookupProduct(barcode, rawBarcodeData: rawBarcodeData);
       
       if (mounted) {
         Navigator.of(context).pop(); // Close loading dialog
@@ -93,7 +93,7 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
           Navigator.of(context).pop(result);
         }
       } else {
-        // Product not found, but still return the barcode
+        // Product not found, but still return the barcode with structure info
         final result = BarcodeScannerResult(
           barcode: barcode,
           productInfo: productInfo,
@@ -227,7 +227,7 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
       body: Stack(
         children: [
           // Camera preview
-          MobileScanner(
+          scanner.MobileScanner(
             controller: _controller,
             fit: BoxFit.contain,
             onDetect: (capture) {
@@ -237,20 +237,47 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
               for (final barcode in barcodes) {
                 if (barcode.rawValue != null && !_isProcessing && !_hasScanned) {
                   final scannedValue = barcode.rawValue!;
-                  final cleanValue = scannedValue.replaceAll(RegExp(r'\D'), '');
+                  final rawData = barcode.displayValue; // May contain additional GS1 data
                   
                   print('Barcode type: ${barcode.type}');
                   print('Scanned barcode: $scannedValue');
-                  print('Clean barcode: $cleanValue');
-                  print('Barcode length: ${cleanValue.length}');
+                  print('Raw barcode data: $rawData');
                   
-                  // Validate barcode length (should be 8-14 digits for products)
-                  if (cleanValue.length >= 8 && cleanValue.length <= 14) {
-                    print('Processing valid barcode: $cleanValue');
-                    _processBarcode(cleanValue);
+                  // Handle different barcode types
+                  if (rawData?.contains('(') == true && rawData?.contains(')') == true) {
+                    // 2D barcode with GS1 Application Identifiers
+                    print('Processing 2D barcode with additional data');
+                    
+                    // Extract GTIN from GS1 data or use raw value
+                    String gtin = scannedValue;
+                    if (rawData?.contains('(01)') == true) {
+                      final gtinMatch = RegExp(r'\(01\)(\d{14})').firstMatch(rawData!);
+                      if (gtinMatch != null) {
+                        gtin = gtinMatch.group(1)!;
+                        // Convert 14-digit GTIN to 13-digit EAN if needed
+                        if (gtin.length == 14 && gtin.startsWith('0')) {
+                          gtin = gtin.substring(1);
+                        }
+                      }
+                    }
+                    
+                    print('Processing 2D barcode with GTIN: $gtin');
+                    _processBarcode(gtin, rawBarcodeData: rawData);
                     break;
                   } else {
-                    print('Invalid barcode length: ${cleanValue.length}, skipping');
+                    // Standard 1D barcode
+                    final cleanValue = scannedValue.replaceAll(RegExp(r'\D'), '');
+                    print('Clean barcode: $cleanValue');
+                    print('Barcode length: ${cleanValue.length}');
+                    
+                    // Validate barcode length (should be 8-14 digits for products)
+                    if (cleanValue.length >= 8 && cleanValue.length <= 14) {
+                      print('Processing valid 1D barcode: $cleanValue');
+                      _processBarcode(cleanValue);
+                      break;
+                    } else {
+                      print('Invalid barcode length: ${cleanValue.length}, skipping');
+                    }
                   }
                 }
               }
@@ -366,7 +393,7 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
         child: ValueListenableBuilder(
           valueListenable: _controller,
           builder: (context, value, child) {
-            final torchEnabled = value.torchState == TorchState.on;
+            final torchEnabled = value.torchState == scanner.TorchState.on;
             return Icon(torchEnabled ? Icons.flash_off : Icons.flash_on);
           },
         ),
