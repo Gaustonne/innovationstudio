@@ -72,7 +72,7 @@ class AppDatabase {
     await _ensureWastedTable(db);
     await _ensureWastedExtras(db);
     await _ensureOrigExpiry(db);
-    await _ensureCostTracking(db);
+    // await _ensureCostTracking(db);
 
     await db.execute('''
       CREATE TABLE IF NOT EXISTS meal_plans (
@@ -130,7 +130,8 @@ class AppDatabase {
         quantity REAL,
         unit TEXT,
         weightKg REAL,
-        movedAt INTEGER NOT NULL
+        movedAt INTEGER NOT NULL,
+        costAud REAL
       )
     ''');
     await db.execute(
