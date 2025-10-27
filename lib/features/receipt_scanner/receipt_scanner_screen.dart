@@ -157,6 +157,9 @@ class _ReceiptScannerScreenState extends State<ReceiptScannerScreen> {
               weight = 0;
             }
             if (name != null) {
+              // Extract price if available
+              final price = itemData?['TotalPrice']?['valueNumber'] as double?;
+              
               items.add(
                 Ingredient(
                   name: name,
@@ -164,6 +167,7 @@ class _ReceiptScannerScreenState extends State<ReceiptScannerScreen> {
                   weightKg: weight,
                   // sentinel "unset" expiry; user must set before adding
                   expiry: DateTime.fromMillisecondsSinceEpoch(0),
+                  costAud: price, // Optional field - can be null
                 ),
               );
             }
@@ -184,13 +188,24 @@ class _ReceiptScannerScreenState extends State<ReceiptScannerScreen> {
             continue;
           }
           if (RegExp(r'^\$?\d+[.,]?\d*').hasMatch(trimmed)) continue;
+          
+          // Try to extract price from the line if it contains both item name and price
+          double? extractedPrice;
+          String cleanName = trimmed;
+          final priceMatch = RegExp(r'(.+?)\s+\$?(\d+\.?\d*)$').firstMatch(trimmed);
+          if (priceMatch != null) {
+            cleanName = priceMatch.group(1)?.trim() ?? trimmed;
+            extractedPrice = double.tryParse(priceMatch.group(2) ?? '');
+          }
+          
           items.add(
             Ingredient(
-              name: trimmed,
+              name: cleanName,
               quantity: 1,
               weightKg: 0,
               // sentinel unset expiry
               expiry: DateTime.fromMillisecondsSinceEpoch(0),
+              costAud: extractedPrice, // Optional field - can be null
             ),
           );
         }
