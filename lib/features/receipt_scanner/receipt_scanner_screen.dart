@@ -13,6 +13,8 @@ import '../inventory/presentation/inventory.dart';
 String get _kImgbbApiKey => dotenv.env['IMGBB_API_KEY'] ?? '';
 String get _kAzureEndpoint => dotenv.env['AZURE_ENDPOINT'] ?? '';
 String get _kAzureApiKey => dotenv.env['AZURE_API_KEY'] ?? '';
+String get _kImageKitPublicKey => dotenv.env['IMAGEKIT_PUBLIC_KEY'] ?? '';
+String get _kImageKitPrivateKey => dotenv.env['IMAGEKIT_PRIVATE_KEY'] ?? '';
 
 class ReceiptScannerScreen extends StatefulWidget {
   const ReceiptScannerScreen({super.key});
@@ -26,6 +28,7 @@ class _ReceiptScannerScreenState extends State<ReceiptScannerScreen> {
   bool _isLoading = false;
   bool _useSample = false;
   bool _envLoaded = false;
+  bool _useImageKit = true;
 
   Future<XFile?> _pickImage() async {
     try {
@@ -33,8 +36,8 @@ class _ReceiptScannerScreenState extends State<ReceiptScannerScreen> {
       // On some Android versions (9+), HEIC/HEIF images are only returned
       // if you request a size modification. Provide maxWidth and imageQuality
       // so gallery/camera picks return a compatible image.
-      const double maxWidth = 4000;
-      const int imageQuality = 100;
+      const double maxWidth = 2000;
+      const int imageQuality = 90;
 
       final photo = await picker.pickImage(
         source: ImageSource.camera,
@@ -221,8 +224,10 @@ class _ReceiptScannerScreenState extends State<ReceiptScannerScreen> {
             }
             if (name != null) {
               // Extract price if available
-              final price = itemData?['TotalPrice']?['valueNumber'] as double?;
-              
+              final price =
+                  itemData?['TotalPrice']?['valueCurrency']?['amount']
+                      as double?;
+
               items.add(
                 Ingredient(
                   name: name,
@@ -251,16 +256,18 @@ class _ReceiptScannerScreenState extends State<ReceiptScannerScreen> {
             continue;
           }
           if (RegExp(r'^\$?\d+[.,]?\d*').hasMatch(trimmed)) continue;
-          
+
           // Try to extract price from the line if it contains both item name and price
           double? extractedPrice;
           String cleanName = trimmed;
-          final priceMatch = RegExp(r'(.+?)\s+\$?(\d+\.?\d*)$').firstMatch(trimmed);
+          final priceMatch = RegExp(
+            r'(.+?)\s+\$?(\d+\.?\d*)$',
+          ).firstMatch(trimmed);
           if (priceMatch != null) {
             cleanName = priceMatch.group(1)?.trim() ?? trimmed;
             extractedPrice = double.tryParse(priceMatch.group(2) ?? '');
           }
-          
+
           items.add(
             Ingredient(
               name: cleanName,
@@ -325,7 +332,26 @@ class _ReceiptScannerScreenState extends State<ReceiptScannerScreen> {
     }
 
     messenger.showSnackBar(const SnackBar(content: Text('Uploading image...')));
-    final imageUrl = await _uploadToImgbb(imageFile);
+    String? imageUrl;
+    if (_useImageKit) {
+      if (_kImageKitPublicKey.isEmpty && _kImageKitPrivateKey.isEmpty) {
+        messenger.showSnackBar(
+          const SnackBar(content: Text('ImageKit API keys missing')),
+        );
+        setState(() => _isLoading = false);
+        return;
+      }
+      imageUrl = await _uploadToImageKit(imageFile);
+    } else {
+      if (_kImgbbApiKey.isEmpty) {
+        messenger.showSnackBar(
+          const SnackBar(content: Text('ImgBB API key missing')),
+        );
+        setState(() => _isLoading = false);
+        return;
+      }
+      imageUrl = await _uploadToImgbb(imageFile);
+    }
     if (imageUrl == null) {
       setState(() => _isLoading = false);
       messenger.showSnackBar(
@@ -399,6 +425,53 @@ class _ReceiptScannerScreenState extends State<ReceiptScannerScreen> {
       _scannedItems = parsed;
       _isLoading = false;
     });
+  }
+
+  Future<String?> _uploadToImageKit(XFile file) async {
+    // ImageKit upload endpoint: https://upload.imagekit.io/api/v1/files/upload
+    // Support both client-side publicKey uploads and server-style privateKey uploads
+    // using HTTP Basic auth. WARNING: embedding a private key in a client app is
+    // insecure for production; prefer server-side signed uploads.
+    if (_kImageKitPublicKey.isEmpty && _kImageKitPrivateKey.isEmpty)
+      return null;
+    try {
+      final bytes = await file.readAsBytes();
+      final uri = Uri.parse('https://upload.imagekit.io/api/v1/files/upload');
+      final request = http.MultipartRequest('POST', uri);
+
+      // fileName is always required
+      final fileName = file.name.isNotEmpty ? file.name : 'upload.jpg';
+      request.fields['fileName'] = fileName;
+
+      // If private key is available, use Basic auth with empty password.
+      if (_kImageKitPrivateKey.isNotEmpty) {
+        final auth = base64Encode(utf8.encode('$_kImageKitPrivateKey:'));
+        request.headers['Authorization'] = 'Basic $auth';
+      } else {
+        // Fall back to publicKey client-side upload
+        request.fields['publicKey'] = _kImageKitPublicKey;
+      }
+
+      final multipartFile = http.MultipartFile.fromBytes(
+        'file',
+        bytes,
+        filename: fileName,
+      );
+      request.files.add(multipartFile);
+
+      final streamed = await request.send();
+      final resp = await http.Response.fromStream(streamed);
+      if (resp.statusCode == 200) {
+        final Map<String, dynamic> j =
+            jsonDecode(resp.body) as Map<String, dynamic>;
+        // ImageKit returns 'url' for uploaded files
+        return j['url'] as String? ?? j['filePath'] as String?;
+      }
+      debugPrint('ImageKit upload failed: ${resp.statusCode} ${resp.body}');
+    } catch (e) {
+      debugPrint('ImageKit upload error: $e');
+    }
+    return null;
   }
 
   @override
@@ -581,6 +654,17 @@ class _ReceiptScannerScreenState extends State<ReceiptScannerScreen> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12.0),
             child: _buildEnvBanner(),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12.0),
+            child: SwitchListTile(
+              title: const Text('Use ImageKit for uploads'),
+              value: _useImageKit,
+              onChanged: (v) => setState(() => _useImageKit = v),
+              secondary: const Icon(Icons.cloud_upload),
+              subtitle: Text(_useImageKit ? 'Using ImageKit' : 'Using ImgBB'),
+              contentPadding: EdgeInsets.zero,
+            ),
           ),
           Expanded(
             child: Padding(
