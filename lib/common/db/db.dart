@@ -5,7 +5,7 @@ import 'package:path/path.dart';
 
 class AppDatabase {
   static const _dbName = 'inventory.db';
-  static const _dbVersion = 4; // bump to force migration
+  static const _dbVersion = 5; // bump to add costAud to inventory
 
   static Database? _instance;
 
@@ -45,6 +45,10 @@ class AppDatabase {
           await _ensureWastedExtras(db);
           await _ensureOrigExpiry(db);
         }
+        // v4 -> v5: ensure inventory has costAud column
+        if (oldVersion < 5) {
+          await _ensureInventoryCostAud(db);
+        }
       },
     );
 
@@ -58,7 +62,8 @@ class AppDatabase {
         name TEXT NOT NULL,
         quantity INTEGER NOT NULL,
         weightKg REAL NOT NULL,
-        expiry TEXT NOT NULL
+        expiry TEXT NOT NULL,
+        costAud REAL
       )
     ''');
 
@@ -125,17 +130,25 @@ class AppDatabase {
         movedAt INTEGER NOT NULL
       )
     ''');
-    await db.execute('CREATE INDEX IF NOT EXISTS idx_wasted_movedAt ON wasted(movedAt)');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_wasted_movedAt ON wasted(movedAt)',
+    );
   }
 
   static Future<void> _ensureWastedExtras(Database db) async {
     // Reason + estValue (ignore if already exists)
-    try { await db.execute('ALTER TABLE wasted ADD COLUMN reason TEXT'); } catch (_) {}
-    try { await db.execute('ALTER TABLE wasted ADD COLUMN estValue REAL'); } catch (_) {}
+    try {
+      await db.execute('ALTER TABLE wasted ADD COLUMN reason TEXT');
+    } catch (_) {}
+    try {
+      await db.execute('ALTER TABLE wasted ADD COLUMN estValue REAL');
+    } catch (_) {}
   }
 
   static Future<void> _ensureOrigExpiry(Database db) async {
-    try { await db.execute('ALTER TABLE wasted ADD COLUMN origExpiry TEXT'); } catch (_) {}
+    try {
+      await db.execute('ALTER TABLE wasted ADD COLUMN origExpiry TEXT');
+    } catch (_) {}
   }
 
   static Future<void> _ensureShoppingList(Database db) async {
@@ -152,6 +165,14 @@ class AppDatabase {
         selectedStore TEXT
       )
     ''');
+  }
+
+  static Future<void> _ensureInventoryCostAud(Database db) async {
+    try {
+      await db.execute('ALTER TABLE inventory ADD COLUMN costAud REAL');
+    } catch (_) {
+      // ignore if column already exists or other harmless errors
+    }
   }
 
   static Future<void> close() async {
