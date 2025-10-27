@@ -5,7 +5,7 @@ import 'package:path/path.dart';
 
 class AppDatabase {
   static const _dbName = 'inventory.db';
-  static const _dbVersion = 4; // bump to force migration
+  static const _dbVersion = 5; // bump to force migration
 
   static Database? _instance;
 
@@ -45,6 +45,10 @@ class AppDatabase {
           await _ensureWastedExtras(db);
           await _ensureOrigExpiry(db);
         }
+        // v4 -> v5: add cost tracking to inventory
+        if (oldVersion < 5) {
+          await _ensureCostTracking(db);
+        }
       },
     );
 
@@ -58,13 +62,15 @@ class AppDatabase {
         name TEXT NOT NULL,
         quantity INTEGER NOT NULL,
         weightKg REAL NOT NULL,
-        expiry TEXT NOT NULL
+        expiry TEXT NOT NULL,
+        costAud REAL
       )
     ''');
 
     await _ensureWastedTable(db);
     await _ensureWastedExtras(db);
     await _ensureOrigExpiry(db);
+    await _ensureCostTracking(db);
 
     await db.execute('''
       CREATE TABLE IF NOT EXISTS meal_plans (
@@ -136,6 +142,11 @@ class AppDatabase {
 
   static Future<void> _ensureOrigExpiry(Database db) async {
     try { await db.execute('ALTER TABLE wasted ADD COLUMN origExpiry TEXT'); } catch (_) {}
+  }
+
+  static Future<void> _ensureCostTracking(Database db) async {
+    try { await db.execute('ALTER TABLE inventory ADD COLUMN costAud REAL'); } catch (_) {}
+    try { await db.execute('ALTER TABLE wasted ADD COLUMN costAud REAL'); } catch (_) {}
   }
 
   static Future<void> _ensureShoppingList(Database db) async {

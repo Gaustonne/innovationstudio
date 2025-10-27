@@ -151,6 +151,9 @@ class ProductInfo {
   final bool isFound;
   final BarcodeStructure? barcodeStructure;
   final ExtendedBarcodeData? extendedData;
+  final double? estimatedPrice;
+  final String? priceSource;
+  final String? currency;
 
   const ProductInfo({
     this.productName,
@@ -161,6 +164,9 @@ class ProductInfo {
     required this.isFound,
     this.barcodeStructure,
     this.extendedData,
+    this.estimatedPrice,
+    this.priceSource,
+    this.currency = 'AUD',
   });
 
   factory ProductInfo.notFound({BarcodeStructure? barcodeStructure}) {
@@ -191,6 +197,8 @@ class ProductInfo {
       isFound: true,
       barcodeStructure: barcodeStructure,
       extendedData: extendedData,
+      estimatedPrice: null, // Will be filled by price lookup
+      priceSource: null,
     );
   }
 
@@ -335,7 +343,9 @@ class BarcodeService {
         );
         if (result.isFound) {
           print('Found product with barcode: $testBarcode');
-          return result;
+          // Enhance with price information
+          final enhancedResult = await enhanceWithPrice(result);
+          return enhancedResult;
         }
       } catch (e) {
         print('OpenFoodFacts lookup failed for $testBarcode: $e');
@@ -607,5 +617,269 @@ class BarcodeService {
     }
 
     return details;
+  }
+
+  /// Estimate product price using various strategies
+  Future<Map<String, dynamic>> estimatePrice(ProductInfo productInfo) async {
+    if (!productInfo.isFound) {
+      return {
+        'price': null,
+        'source': 'not_found',
+        'confidence': 0.0,
+        'suggestions': <String>[],
+      };
+    }
+
+    // Try multiple price estimation strategies
+    final results = await Future.wait([
+      _estimatePriceFromCategory(productInfo),
+      _estimatePriceFromProductName(productInfo),
+      _estimatePriceFromBrand(productInfo),
+    ]);
+
+    // Combine results and pick the best estimate
+    double? bestPrice;
+    String bestSource = 'unknown';
+    double bestConfidence = 0.0;
+    List<String> suggestions = [];
+
+    for (final result in results) {
+      final price = result['price'] as double?;
+      final confidence = result['confidence'] as double;
+      final source = result['source'] as String;
+      
+      if (price != null && confidence > bestConfidence) {
+        bestPrice = price;
+        bestSource = source;
+        bestConfidence = confidence;
+      }
+      
+      final resultSuggestions = result['suggestions'] as List<String>? ?? [];
+      suggestions.addAll(resultSuggestions);
+    }
+
+    return {
+      'price': bestPrice,
+      'source': bestSource,
+      'confidence': bestConfidence,
+      'suggestions': suggestions.toSet().toList(),
+    };
+  }
+
+  /// Estimate price based on product category
+  Future<Map<String, dynamic>> _estimatePriceFromCategory(ProductInfo productInfo) async {
+    final categories = productInfo.categories?.toLowerCase() ?? '';
+    double? estimatedPrice;
+    double confidence = 0.3;
+    List<String> suggestions = [];
+
+    // Australian grocery price ranges (AUD) based on common categories
+    if (categories.contains('beverages') || categories.contains('drinks')) {
+      if (categories.contains('water')) {
+        estimatedPrice = 2.50;
+        suggestions.add('Bottled water typically costs \$1.50-\$4.00');
+      } else if (categories.contains('soft-drinks') || categories.contains('sodas')) {
+        estimatedPrice = 3.50;
+        suggestions.add('Soft drinks typically cost \$2.50-\$5.00');
+      } else if (categories.contains('juices')) {
+        estimatedPrice = 4.50;
+        suggestions.add('Fruit juices typically cost \$3.00-\$7.00');
+      } else {
+        estimatedPrice = 4.00;
+        suggestions.add('Beverages typically cost \$2.00-\$8.00');
+      }
+    } else if (categories.contains('dairy')) {
+      if (categories.contains('milk')) {
+        estimatedPrice = 3.20;
+        suggestions.add('Milk typically costs \$2.50-\$4.50 per liter');
+      } else if (categories.contains('cheese')) {
+        estimatedPrice = 6.50;
+        suggestions.add('Cheese typically costs \$4.00-\$15.00');
+      } else if (categories.contains('yogurt')) {
+        estimatedPrice = 5.50;
+        suggestions.add('Yogurt typically costs \$3.00-\$8.00');
+      } else {
+        estimatedPrice = 5.00;
+        suggestions.add('Dairy products typically cost \$2.50-\$12.00');
+      }
+    } else if (categories.contains('snacks')) {
+      if (categories.contains('chips') || categories.contains('crisps')) {
+        estimatedPrice = 4.00;
+        suggestions.add('Chips typically cost \$2.50-\$6.00');
+      } else if (categories.contains('chocolate') || categories.contains('confectionery')) {
+        estimatedPrice = 4.50;
+        suggestions.add('Chocolate typically costs \$2.00-\$8.00');
+      } else {
+        estimatedPrice = 3.50;
+        suggestions.add('Snacks typically cost \$1.50-\$7.00');
+      }
+    } else if (categories.contains('cereals') || categories.contains('breakfast')) {
+      estimatedPrice = 6.50;
+      suggestions.add('Breakfast cereals typically cost \$4.00-\$10.00');
+    } else if (categories.contains('bread') || categories.contains('bakery')) {
+      estimatedPrice = 3.50;
+      suggestions.add('Bread typically costs \$2.00-\$6.00');
+    } else if (categories.contains('canned') || categories.contains('preserved')) {
+      estimatedPrice = 2.50;
+      suggestions.add('Canned goods typically cost \$1.50-\$5.00');
+    } else if (categories.contains('frozen')) {
+      estimatedPrice = 5.50;
+      suggestions.add('Frozen foods typically cost \$3.00-\$12.00');
+    } else if (categories.contains('meat') || categories.contains('poultry')) {
+      estimatedPrice = 8.50;
+      suggestions.add('Meat products typically cost \$5.00-\$20.00 per kg');
+    } else if (categories.contains('fish') || categories.contains('seafood')) {
+      estimatedPrice = 12.00;
+      suggestions.add('Seafood typically costs \$8.00-\$25.00 per kg');
+    } else if (categories.contains('fruits') || categories.contains('vegetables')) {
+      estimatedPrice = 4.50;
+      suggestions.add('Fresh produce typically costs \$2.00-\$8.00 per kg');
+    }
+
+    if (estimatedPrice != null) {
+      confidence = 0.4;
+    }
+
+    return {
+      'price': estimatedPrice,
+      'source': 'category_estimation',
+      'confidence': confidence,
+      'suggestions': suggestions,
+    };
+  }
+
+  /// Estimate price based on product name patterns
+  Future<Map<String, dynamic>> _estimatePriceFromProductName(ProductInfo productInfo) async {
+    final name = '${productInfo.brand ?? ''} ${productInfo.productName ?? ''}'.toLowerCase();
+    final quantity = productInfo.displayQuantity?.toLowerCase() ?? '';
+    
+    double? estimatedPrice;
+    double confidence = 0.2;
+    List<String> suggestions = [];
+
+    // Look for size indicators to adjust price
+    double sizeMultiplier = 1.0;
+    if (quantity.contains('kg')) {
+      final match = RegExp(r'(\d+(?:\.\d+)?)\s*kg').firstMatch(quantity);
+      if (match != null) {
+        final weight = double.tryParse(match.group(1) ?? '');
+        if (weight != null) {
+          sizeMultiplier = weight;
+          suggestions.add('Adjusted for ${weight}kg package size');
+        }
+      }
+    } else if (quantity.contains('g')) {
+      final match = RegExp(r'(\d+)\s*g').firstMatch(quantity);
+      if (match != null) {
+        final grams = double.tryParse(match.group(1) ?? '');
+        if (grams != null) {
+          sizeMultiplier = grams / 1000; // Convert to kg equivalent
+          suggestions.add('Adjusted for ${grams}g package size');
+        }
+      }
+    } else if (quantity.contains('l')) {
+      final match = RegExp(r'(\d+(?:\.\d+)?)\s*l').firstMatch(quantity);
+      if (match != null) {
+        final liters = double.tryParse(match.group(1) ?? '');
+        if (liters != null) {
+          sizeMultiplier = liters;
+          suggestions.add('Adjusted for ${liters}L package size');
+        }
+      }
+    } else if (quantity.contains('ml')) {
+      final match = RegExp(r'(\d+)\s*ml').firstMatch(quantity);
+      if (match != null) {
+        final ml = double.tryParse(match.group(1) ?? '');
+        if (ml != null) {
+          sizeMultiplier = ml / 1000; // Convert to liter equivalent
+          suggestions.add('Adjusted for ${ml}mL package size');
+        }
+      }
+    }
+
+    // Base price estimation from product name patterns
+    if (name.contains('coca cola') || name.contains('pepsi')) {
+      estimatedPrice = 3.50 * sizeMultiplier;
+      confidence = 0.6;
+      suggestions.add('Major cola brand pricing');
+    } else if (name.contains('home brand') || name.contains('woolworths') || name.contains('coles')) {
+      estimatedPrice = 2.50 * sizeMultiplier;
+      confidence = 0.5;
+      suggestions.add('Store brand typically 20-30% cheaper');
+    } else if (name.contains('organic')) {
+      estimatedPrice = 5.50 * sizeMultiplier;
+      confidence = 0.4;
+      suggestions.add('Organic products typically 30-50% premium');
+    } else if (name.contains('premium') || name.contains('artisan')) {
+      estimatedPrice = 6.50 * sizeMultiplier;
+      confidence = 0.4;
+      suggestions.add('Premium products typically cost 40-60% more');
+    }
+
+    return {
+      'price': estimatedPrice,
+      'source': 'product_name_analysis',
+      'confidence': confidence,
+      'suggestions': suggestions,
+    };
+  }
+
+  /// Estimate price based on brand recognition
+  Future<Map<String, dynamic>> _estimatePriceFromBrand(ProductInfo productInfo) async {
+    final brand = productInfo.brand?.toLowerCase() ?? '';
+    double? estimatedPrice;
+    double confidence = 0.1;
+    List<String> suggestions = [];
+
+    // Australian brand price positioning
+    final premiumBrands = ['nestle', 'unilever', 'kraft', 'cadbury', 'arnott\'s'];
+    final budgetBrands = ['home brand', 'woolworths', 'coles', 'aldi'];
+    final midRangeBrands = ['sanitarium', 'bega', 'peters', 'mainland'];
+
+    if (premiumBrands.any((b) => brand.contains(b))) {
+      estimatedPrice = 5.50;
+      confidence = 0.3;
+      suggestions.add('Premium brand typically 20-40% higher pricing');
+    } else if (budgetBrands.any((b) => brand.contains(b))) {
+      estimatedPrice = 2.50;
+      confidence = 0.4;
+      suggestions.add('Store/budget brand typically 20-40% lower pricing');
+    } else if (midRangeBrands.any((b) => brand.contains(b))) {
+      estimatedPrice = 4.00;
+      confidence = 0.3;
+      suggestions.add('Mid-range brand with competitive pricing');
+    }
+
+    return {
+      'price': estimatedPrice,
+      'source': 'brand_analysis',
+      'confidence': confidence,
+      'suggestions': suggestions,
+    };
+  }
+
+  /// Create a ProductInfo with price information
+  Future<ProductInfo> enhanceWithPrice(ProductInfo originalInfo) async {
+    if (!originalInfo.isFound) {
+      return originalInfo;
+    }
+
+    final priceData = await estimatePrice(originalInfo);
+    final estimatedPrice = priceData['price'] as double?;
+    final priceSource = priceData['source'] as String;
+
+    return ProductInfo(
+      productName: originalInfo.productName,
+      brand: originalInfo.brand,
+      quantity: originalInfo.quantity,
+      imageUrl: originalInfo.imageUrl,
+      categories: originalInfo.categories,
+      isFound: originalInfo.isFound,
+      barcodeStructure: originalInfo.barcodeStructure,
+      extendedData: originalInfo.extendedData,
+      estimatedPrice: estimatedPrice,
+      priceSource: priceSource,
+      currency: 'AUD',
+    );
   }
 }

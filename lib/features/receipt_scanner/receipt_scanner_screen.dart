@@ -93,12 +93,29 @@ class _ReceiptScannerScreenState extends State<ReceiptScannerScreen> {
 
   Future<Map<String, dynamic>?> _analyzeWithAzure(String imageUrl) async {
     if (_kAzureEndpoint.isEmpty || _kAzureApiKey.isEmpty) {
+      debugPrint('Azure credentials missing: endpoint=${_kAzureEndpoint.isNotEmpty}, key=${_kAzureApiKey.isNotEmpty}');
       return null;
     }
+    
     try {
-      final uri = Uri.parse(
-        '$_kAzureEndpoint/documentintelligence/documentModels/prebuilt-receipt:analyze?api-version=2024-11-30',
-      );
+      // Try multiple API formats - Azure has different endpoint patterns
+      Uri uri;
+      
+      // First try the newer Document Intelligence API
+      if (_kAzureEndpoint.contains('cognitiveservices.azure.com')) {
+        uri = Uri.parse(
+          '$_kAzureEndpoint/formrecognizer/documentModels/prebuilt-receipt:analyze?api-version=2023-07-31',
+        );
+      } else {
+        // Fallback to older Form Recognizer API format
+        uri = Uri.parse(
+          '$_kAzureEndpoint/formrecognizer/v2.1/prebuilt/receipt/analyze',
+        );
+      }
+      
+      debugPrint('Azure request URL: $uri');
+      debugPrint('Image URL: $imageUrl');
+      
       final resp = await http.post(
         uri,
         headers: {
@@ -107,31 +124,77 @@ class _ReceiptScannerScreenState extends State<ReceiptScannerScreen> {
         },
         body: jsonEncode({'urlSource': imageUrl}),
       );
+      
+      debugPrint('Azure initial response: ${resp.statusCode}');
+      debugPrint('Response headers: ${resp.headers}');
+      debugPrint('Response body: ${resp.body}');
+      
       if (resp.statusCode == 202) {
         final opLocation = resp.headers['operation-location'];
-        if (opLocation == null) return null;
-        for (var i = 0; i < 20; i++) {
-          await Future.delayed(Duration(seconds: 1 << i));
+        if (opLocation == null) {
+          debugPrint('Missing operation-location header');
+          return null;
+        }
+        
+        debugPrint('Polling operation at: $opLocation');
+        
+        // Poll for results with exponential backoff
+        for (var i = 0; i < 10; i++) {
+          final waitTime = i == 0 ? 1 : (2 * i);
+          await Future.delayed(Duration(seconds: waitTime));
+          
           final r = await http.get(
             Uri.parse(opLocation),
             headers: {'Ocp-Apim-Subscription-Key': _kAzureApiKey},
           );
+          
+          debugPrint('Poll attempt ${i + 1}: Status ${r.statusCode}');
+          
           if (r.statusCode == 200) {
             final Map<String, dynamic> j =
                 jsonDecode(r.body) as Map<String, dynamic>;
             final status = (j['status'] as String?)?.toLowerCase() ?? '';
-            if (status == 'succeeded' || status == 'failed') return j;
+            
+            debugPrint('Analysis status: $status');
+            
+            if (status == 'succeeded') {
+              debugPrint('Analysis succeeded!');
+              return j;
+            } else if (status == 'failed') {
+              debugPrint('Analysis failed: ${j['error']}');
+              return null;
+            }
+            // Continue polling if status is 'running' or 'notStarted'
+          } else {
+            debugPrint('Poll request failed: ${r.statusCode} ${r.body}');
           }
         }
+        
+        debugPrint('Polling timeout - analysis took too long');
+        return null;
+        
       } else if (resp.statusCode == 200) {
+        // Synchronous response (shouldn't happen with this API but handle it)
+        debugPrint('Synchronous response received');
         return jsonDecode(resp.body) as Map<String, dynamic>;
       } else {
-        debugPrint(
-          'Azure analyze start failed: ${resp.statusCode} ${resp.body}',
-        );
+        debugPrint('Azure analyze start failed: ${resp.statusCode}');
+        debugPrint('Error response: ${resp.body}');
+        
+        // Try to parse error details
+        if (resp.body.isNotEmpty) {
+          try {
+            final errorData = jsonDecode(resp.body);
+            debugPrint('Parsed error: $errorData');
+          } catch (e) {
+            debugPrint('Could not parse error response as JSON');
+          }
+        }
+        return null;
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
       debugPrint('Azure analyze error: $e');
+      debugPrint('Stack trace: $stackTrace');
     }
     return null;
   }
@@ -273,16 +336,61 @@ class _ReceiptScannerScreenState extends State<ReceiptScannerScreen> {
 
     messenger.showSnackBar(
       const SnackBar(
-        content: Text('Analyzing... This may take a moment'),
-        duration: Duration(seconds: 10),
+        content: Text('Analyzing receipt... This may take up to 30 seconds'),
+        duration: Duration(seconds: 15),
       ),
     );
+    
     final result = await _analyzeWithAzure(imageUrl);
     if (result == null) {
       setState(() => _isLoading = false);
-      messenger.showSnackBar(
-        const SnackBar(content: Text('Document analysis failed')),
-      );
+      
+      // Show more helpful error message and offer fallback
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Receipt Analysis Failed'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('The receipt could not be analyzed automatically.'),
+                const SizedBox(height: 12),
+                const Text('This could be due to:'),
+                const Text('• Poor image quality or lighting'),
+                const Text('• Unsupported receipt format'),
+                const Text('• API configuration issues'),
+                const SizedBox(height: 12),
+                const Text('Would you like to try with sample data instead?'),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  setState(() {
+                    _useSample = true;
+                  });
+                  _scanAndAnalyze(); // Retry with sample data
+                },
+                child: const Text('Try Sample Data'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  _showManualEntryDialog();
+                },
+                child: const Text('Add Items Manually'),
+              ),
+            ],
+          ),
+        );
+      }
       return;
     }
 
@@ -310,6 +418,90 @@ class _ReceiptScannerScreenState extends State<ReceiptScannerScreen> {
     } finally {
       if (mounted) setState(() => _envLoaded = true);
     }
+  }
+
+  void _showManualEntryDialog() {
+    final TextEditingController textController = TextEditingController();
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Add Items Manually'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Enter items one per line (e.g., "Milk \$3.50"):'),
+            const SizedBox(height: 12),
+            TextField(
+              controller: textController,
+              maxLines: 8,
+              decoration: const InputDecoration(
+                hintText: 'Bread \$2.80\nMilk 2L \$4.50\nBananas \$2.99\n...',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final text = textController.text.trim();
+              if (text.isNotEmpty) {
+                Navigator.pop(context);
+                _parseManualEntries(text);
+              }
+            },
+            child: const Text('Parse Items'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _parseManualEntries(String text) {
+    final items = <Ingredient>[];
+    final lines = text.split('\n');
+    
+    for (final line in lines) {
+      final trimmed = line.trim();
+      if (trimmed.isEmpty) continue;
+      
+      // Parse line like "Milk $3.50" or just "Bread"
+      double? price;
+      String itemName = trimmed;
+      
+      final priceMatch = RegExp(r'(.+?)\s+\$?(\d+\.?\d*)$').firstMatch(trimmed);
+      if (priceMatch != null) {
+        itemName = priceMatch.group(1)?.trim() ?? trimmed;
+        price = double.tryParse(priceMatch.group(2) ?? '');
+      }
+      
+      items.add(
+        Ingredient(
+          name: itemName,
+          quantity: 1,
+          weightKg: 0,
+          expiry: DateTime.now().add(const Duration(days: 7)), // Default 1 week
+          costAud: price,
+        ),
+      );
+    }
+    
+    setState(() {
+      _scannedItems = items;
+    });
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Parsed ${items.length} items from manual entry'),
+        backgroundColor: Colors.green,
+        duration: const Duration(seconds: 2),
+      ),
+    );
   }
 
   Widget _buildEnvBanner() {

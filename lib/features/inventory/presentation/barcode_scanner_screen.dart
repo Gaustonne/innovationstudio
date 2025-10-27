@@ -90,7 +90,7 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
         );
         
         if (mounted) {
-          Navigator.of(context).pop(result);
+          _showProductFound(result);
         }
       } else {
         // Product not found, but still return the barcode with structure info
@@ -150,7 +150,269 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
       quantity: quantity,
       weightKg: weightKg ?? 1.0,
       expiry: DateTime.now().add(const Duration(days: 7)), // Default 7 days
+      costAud: productInfo.estimatedPrice,
     );
+  }
+
+  void _showProductFound(BarcodeScannerResult result) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(result.productInfo.displayName),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Product Image
+              if (result.productInfo.imageUrl != null && result.productInfo.imageUrl!.isNotEmpty) ...[
+                Center(
+                  child: Container(
+                    width: 200,
+                    height: 200,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.grey.shade300),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.network(
+                        result.productInfo.imageUrl!,
+                        fit: BoxFit.cover,
+                        loadingBuilder: (context, child, loadingProgress) {
+                          if (loadingProgress == null) return child;
+                          return Center(
+                            child: CircularProgressIndicator(
+                              value: loadingProgress.expectedTotalBytes != null
+                                  ? loadingProgress.cumulativeBytesLoaded / 
+                                    loadingProgress.expectedTotalBytes!
+                                  : null,
+                            ),
+                          );
+                        },
+                        errorBuilder: (context, error, stackTrace) {
+                          return Container(
+                            color: Colors.grey.shade100,
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.image_not_supported,
+                                  size: 50,
+                                  color: Colors.grey.shade400,
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Image not available',
+                                  style: TextStyle(
+                                    color: Colors.grey.shade600,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ] else ...[
+                // No image placeholder
+                Center(
+                  child: Container(
+                    width: 200,
+                    height: 200,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.grey.shade300),
+                      color: Colors.grey.shade100,
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.inventory_2_outlined,
+                          size: 60,
+                          color: Colors.grey.shade400,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'No image available',
+                          style: TextStyle(
+                            color: Colors.grey.shade600,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
+              
+              // Product Details
+              _buildDetailRow('Barcode', _barcodeService.formatBarcode(result.barcode)),
+              
+              if (result.productInfo.brand != null)
+                _buildDetailRow('Brand', result.productInfo.brand!),
+              
+              if (result.productInfo.displayQuantity != null)
+                _buildDetailRow('Quantity', result.productInfo.displayQuantity!),
+              
+              // Price Information
+              if (result.productInfo.estimatedPrice != null) ...[
+                _buildDetailRow('Estimated Price', 
+                  '\$${result.productInfo.estimatedPrice!.toStringAsFixed(2)} ${result.productInfo.currency ?? 'AUD'}'),
+                if (result.productInfo.priceSource != null)
+                  _buildDetailRow('Price Source', _formatPriceSource(result.productInfo.priceSource!)),
+              ],
+              
+              if (result.productInfo.categories != null)
+                _buildDetailRow('Categories', result.productInfo.categories!),
+              
+              // Barcode Structure Info
+              if (result.productInfo.barcodeStructure != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'Barcode Analysis',
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                _buildDetailRow('Type', result.productInfo.barcodeStructure!.type.name.toUpperCase()),
+                _buildDetailRow('Country', result.productInfo.countryOfRegistration),
+                if (result.productInfo.barcodeStructure!.isValidChecksum)
+                  _buildDetailRow('Checksum', '✅ Valid')
+                else
+                  _buildDetailRow('Checksum', '❌ Invalid'),
+              ],
+              
+              // Extended Data (from 2D barcodes)
+              if (result.productInfo.extendedData != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'Additional Data',
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                if (result.productInfo.extendedData!.expiryDate != null)
+                  _buildDetailRow('Expiry Date', 
+                    result.productInfo.extendedData!.expiryDate!.toIso8601String().split('T')[0]),
+                if (result.productInfo.extendedData!.batchNumber != null)
+                  _buildDetailRow('Batch Number', result.productInfo.extendedData!.batchNumber!),
+                if (result.productInfo.extendedData!.variableWeight != null)
+                  _buildDetailRow('Variable Weight', 
+                    '${result.productInfo.extendedData!.variableWeight!.toStringAsFixed(3)} kg'),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              _resetScanner();
+            },
+            child: const Text('Scan Again'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              Navigator.of(context).pop(result);
+            },
+            child: const Text('Add to Inventory'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 100,
+            child: Text(
+              '$label:',
+              style: const TextStyle(fontWeight: FontWeight.w500),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(color: Colors.black87),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatPriceSource(String source) {
+    switch (source) {
+      case 'category_estimation':
+        return 'Category Analysis';
+      case 'product_name_analysis':
+        return 'Product Name Analysis';
+      case 'brand_analysis':
+        return 'Brand Analysis';
+      case 'api_lookup':
+        return 'Online Database';
+      case 'barcode_data':
+        return 'Barcode Data';
+      default:
+        return 'Estimation';
+    }
+  }
+
+  List<Widget> _getPricingGuidance(String country) {
+    List<String> suggestions = [];
+    
+    switch (country) {
+      case 'Australia':
+        suggestions = [
+          '• Australian products typically range \$2-\$15',
+          '• Store brands (Coles/Woolworths) are 20-30% cheaper',
+          '• Premium/organic products cost 30-50% more',
+          '• Check product size for accurate cost per unit',
+        ];
+        break;
+      case 'USA & Canada':
+        suggestions = [
+          '• Imported products may have premium pricing',
+          '• Convert pricing from USD/CAD to AUD',
+          '• Factor in import duties and shipping costs',
+        ];
+        break;
+      case 'New Zealand':
+        suggestions = [
+          '• NZ products similar to Australian pricing',
+          '• May have slight premium due to import costs',
+        ];
+        break;
+      default:
+        suggestions = [
+          '• International products may have premium pricing',
+          '• Check for local equivalents for comparison',
+          '• Factor in import costs and currency conversion',
+        ];
+    }
+    
+    return suggestions.map((suggestion) => Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Text(
+        suggestion,
+        style: const TextStyle(fontSize: 13),
+      ),
+    )).toList();
   }
 
   void _showProductNotFound(BarcodeScannerResult result) {
@@ -158,14 +420,96 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Product Not Found'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Barcode: ${_barcodeService.formatBarcode(result.barcode)}'),
-            const SizedBox(height: 16),
-            const Text('This product was not found in our database. You can still add it manually.'),
-          ],
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('This product was not found in our database, but we can still analyze the barcode:'),
+              const SizedBox(height: 16),
+              
+              // Barcode Details
+              _buildDetailRow('Barcode', _barcodeService.formatBarcode(result.barcode)),
+              
+              // Barcode Structure Info
+              if (result.productInfo.barcodeStructure != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'Barcode Analysis',
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                _buildDetailRow('Type', result.productInfo.barcodeStructure!.type.name.toUpperCase()),
+                _buildDetailRow('Country', result.productInfo.countryOfRegistration),
+                if (result.productInfo.barcodeStructure!.isValidChecksum)
+                  _buildDetailRow('Checksum', '✅ Valid')
+                else
+                  _buildDetailRow('Checksum', '❌ Invalid'),
+                
+                if (result.productInfo.barcodeStructure!.manufacturerCode != null)
+                  _buildDetailRow('Manufacturer Code', result.productInfo.barcodeStructure!.manufacturerCode!),
+                if (result.productInfo.barcodeStructure!.productCode != null)
+                  _buildDetailRow('Product Code', result.productInfo.barcodeStructure!.productCode!),
+              ],
+              
+              // Extended Data (from 2D barcodes)
+              if (result.productInfo.extendedData != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'Additional Data',
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                if (result.productInfo.extendedData!.expiryDate != null)
+                  _buildDetailRow('Expiry Date', 
+                    result.productInfo.extendedData!.expiryDate!.toIso8601String().split('T')[0]),
+                if (result.productInfo.extendedData!.batchNumber != null)
+                  _buildDetailRow('Batch Number', result.productInfo.extendedData!.batchNumber!),
+                if (result.productInfo.extendedData!.variableWeight != null)
+                  _buildDetailRow('Variable Weight', 
+                    '${result.productInfo.extendedData!.variableWeight!.toStringAsFixed(3)} kg'),
+              ],
+              
+              const SizedBox(height: 16),
+              
+              // Pricing guidance
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.blue.shade200),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.monetization_on, size: 16, color: Colors.blue.shade700),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Pricing Guidance',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.blue.shade700,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    ..._getPricingGuidance(result.productInfo.countryOfRegistration),
+                  ],
+                ),
+              ),
+              
+              const SizedBox(height: 16),
+              const Text('You can still add this item manually to your inventory.'),
+            ],
+          ),
         ),
         actions: [
           TextButton(

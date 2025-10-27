@@ -6,6 +6,7 @@ class Ingredient {
   final int quantity;
   final double weightKg;
   final DateTime expiry;
+  final double? costAud;
 
   Ingredient({
     String? id,
@@ -13,6 +14,7 @@ class Ingredient {
     required this.quantity,
     required this.weightKg,
     required this.expiry,
+    this.costAud,
   }) : id = id ?? const Uuid().v4();
 
   Ingredient copyWith({
@@ -21,6 +23,7 @@ class Ingredient {
     int? quantity,
     double? weightKg,
     DateTime? expiry,
+    double? costAud,
   }) {
     return Ingredient(
       id: id ?? this.id,
@@ -28,6 +31,7 @@ class Ingredient {
       quantity: quantity ?? this.quantity,
       weightKg: weightKg ?? this.weightKg,
       expiry: expiry ?? this.expiry,
+      costAud: costAud ?? this.costAud,
     );
   }
 
@@ -37,6 +41,7 @@ class Ingredient {
         'quantity': quantity,
         'weightKg': weightKg,
         'expiry': expiry.toIso8601String(),
+        'costAud': costAud,
       };
 
   factory Ingredient.fromMap(Map<String, dynamic> m) {
@@ -56,6 +61,7 @@ class Ingredient {
       quantity: (m['quantity'] as num).toInt(),
       weightKg: (m['weightKg'] as num).toDouble(),
       expiry: expiry,
+      costAud: (m['costAud'] as num?)?.toDouble(),
     );
   }
 

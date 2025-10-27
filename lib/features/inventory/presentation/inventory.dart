@@ -145,9 +145,29 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
     final shopping = await _shoppingListStore.getAll();
 
     if (fetchPrices) {
+      print('Fetching prices for ${shopping.length} shopping items...');
       for (var i = 0; i < shopping.length; i++) {
         final item = shopping[i];
         if (item.status == ShoppingItemStatus.buy) {
+          print('Fetching prices for: ${item.name}');
+          final prices = await _pricingService.getPriceOptions(item.name);
+          print('Got ${prices.length} price options for ${item.name}');
+          shopping[i] = item.copyWith(
+            priceOptions: prices,
+            selectedStore:
+                item.selectedStore ??
+                (prices.isNotEmpty ? prices.first.store : null),
+          );
+          await _shoppingListStore.update(shopping[i]);
+        }
+      }
+      print('Finished fetching prices');
+    } else {
+      // Auto-fetch prices for items that don't have any
+      for (var i = 0; i < shopping.length; i++) {
+        final item = shopping[i];
+        if (item.status == ShoppingItemStatus.buy && item.priceOptions.isEmpty) {
+          print('Auto-fetching prices for: ${item.name}');
           final prices = await _pricingService.getPriceOptions(item.name);
           shopping[i] = item.copyWith(
             priceOptions: prices,
@@ -315,6 +335,52 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
     final moved = samples.last;
     await _inventoryStore.delete(moved.id);
     await _wastedStore.insert(moved, movedAt: DateTime.now());
+
+    // Clear existing shopping list
+    final existingShopping = await _shoppingListStore.getAll();
+    for (final item in existingShopping) {
+      await _shoppingListStore.delete(item.id);
+    }
+
+    // Add sample shopping list items
+    final shoppingSamples = [
+      ShoppingListItem(
+        name: 'lettuce',
+        quantity: 2,
+        unit: 'unit',
+        status: ShoppingItemStatus.buy,
+        category: 'produce',
+        priceOptions: [],
+      ),
+      ShoppingListItem(
+        name: 'cucumber',
+        quantity: 2,
+        unit: 'unit',
+        status: ShoppingItemStatus.buy,
+        category: 'produce',
+        priceOptions: [],
+      ),
+      ShoppingListItem(
+        name: 'milk',
+        quantity: 1,
+        unit: 'L',
+        status: ShoppingItemStatus.buy,
+        category: 'dairy',
+        priceOptions: [],
+      ),
+      ShoppingListItem(
+        name: 'cheese',
+        quantity: 1,
+        unit: 'pack',
+        status: ShoppingItemStatus.buy,
+        category: 'dairy',
+        priceOptions: [],
+      ),
+    ];
+
+    for (final item in shoppingSamples) {
+      await _shoppingListStore.insert(item);
+    }
 
     final prefs = PreferencesService();
     await prefs.clear();
@@ -624,9 +690,27 @@ class _InventoryHomePageState extends State<InventoryHomePage> {
             );
           },
         ),
-        floatingActionButton: FloatingActionButton(
-          onPressed: () => _handleAddOrEditFromScreen(),
-          child: const Icon(Icons.add),
+        floatingActionButton: ValueListenableBuilder<InventoryPage>(
+          valueListenable: activePageNotifier,
+          builder: (context, active, _) {
+            // Only show add button for main inventory page
+            if (active == InventoryPage.main) {
+              return FloatingActionButton(
+                onPressed: () => _handleAddOrEditFromScreen(),
+                child: const Icon(Icons.add),
+              );
+            }
+            // For shopping list, show refresh button with different positioning
+            else if (active == InventoryPage.shoppingList) {
+              return FloatingActionButton.extended(
+                onPressed: () => _loadData(fetchPrices: true),
+                label: const Text('Refresh Prices'),
+                icon: const Icon(Icons.refresh),
+              );
+            }
+            // For other pages, no floating action button
+            return const SizedBox.shrink();
+          },
         ),
       ),
     );
