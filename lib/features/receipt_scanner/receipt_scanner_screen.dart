@@ -28,7 +28,7 @@ class _ReceiptScannerScreenState extends State<ReceiptScannerScreen> {
   bool _isLoading = false;
   bool _useSample = false;
   bool _envLoaded = false;
-  bool _useImageKit = false;
+  bool _useImageKit = true;
 
   Future<XFile?> _pickImage() async {
     try {
