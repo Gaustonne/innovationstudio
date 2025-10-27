@@ -7,6 +7,7 @@ import 'package:path/path.dart' as path;
 import 'package:http/http.dart' as http;
 import '../../common/db/models/ingredient.dart';
 import '../../common/db/collections/inventory_store.dart';
+import '../inventory/presentation/inventory.dart';
 
 class CameraScanScreen extends StatefulWidget {
   const CameraScanScreen({Key? key}) : super(key: key);
@@ -20,7 +21,7 @@ class ScannedIngredient {
   final double confidence;
   final String imagePath;
   final bool isEdited;
-  
+
   ScannedIngredient({
     required this.name,
     required this.confidence,
@@ -57,8 +58,10 @@ class _CameraScanScreenState extends State<CameraScanScreen> {
   double? _confidence;
   bool _isProcessing = false;
 
-  final String _predictionKey = '4jFsYRIQmKpBGgRYE9oebAbWQAD6UGuYBDSaoUVpiknSjnozVdfxJQQJ99BJACi0881XJ3w3AAAIACOGvhXu';
-  final String _endpoint = 'https://customvisionkimleng-prediction.cognitiveservices.azure.com/';
+  final String _predictionKey =
+      '4jFsYRIQmKpBGgRYE9oebAbWQAD6UGuYBDSaoUVpiknSjnozVdfxJQQJ99BJACi0881XJ3w3AAAIACOGvhXu';
+  final String _endpoint =
+      'https://customvisionkimleng-prediction.cognitiveservices.azure.com/';
   final String _projectId = '160499c0-eaed-47c2-8191-8cee61ce9ef8';
   final String _iterationName = 'Iteration3';
 
@@ -133,7 +136,7 @@ class _CameraScanScreenState extends State<CameraScanScreen> {
           final topPrediction = result['predictions'][0];
           final predictedName = topPrediction['tagName'];
           final confidence = topPrediction['probability'];
-          
+
           setState(() {
             _predictedLabel = predictedName;
             _confidence = confidence;
@@ -146,19 +149,25 @@ class _CameraScanScreenState extends State<CameraScanScreen> {
               confidence: confidence,
               imagePath: savedImage.path,
             );
-            
+
             setState(() {
               _scannedIngredients.add(scannedIngredient);
             });
-            
+
             _showIngredientAddedSnackBar(scannedIngredient);
           } else {
             // Single mode - show confirmation dialog
-            _showSingleIngredientDialog(predictedName, confidence, savedImage.path);
+            _showSingleIngredientDialog(
+              predictedName,
+              confidence,
+              savedImage.path,
+            );
           }
         }
       } else {
-        debugPrint('Prediction API error: ${response.statusCode} ${response.body}');
+        debugPrint(
+          'Prediction API error: ${response.statusCode} ${response.body}',
+        );
         _showError('Failed to analyze image. Please try again.');
       }
 
@@ -170,7 +179,11 @@ class _CameraScanScreenState extends State<CameraScanScreen> {
     }
   }
 
-  void _showSingleIngredientDialog(String ingredientName, double confidence, String imagePath) {
+  void _showSingleIngredientDialog(
+    String ingredientName,
+    double confidence,
+    String imagePath,
+  ) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -189,24 +202,18 @@ class _CameraScanScreenState extends State<CameraScanScreen> {
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(8),
-                child: Image.file(
-                  File(imagePath),
-                  fit: BoxFit.cover,
-                ),
+                child: Image.file(File(imagePath), fit: BoxFit.cover),
               ),
             ),
             const SizedBox(height: 16),
-            
+
             // Detection results
             Text(
               ingredientName.toUpperCase(),
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 4),
-            
+
             Text(
               'Confidence: ${(confidence * 100).toInt()}%',
               style: TextStyle(
@@ -238,11 +245,13 @@ class _CameraScanScreenState extends State<CameraScanScreen> {
           FilledButton(
             onPressed: () {
               Navigator.of(context).pop();
-              _addSingleIngredientToInventory(ScannedIngredient(
-                name: ingredientName,
-                confidence: confidence,
-                imagePath: imagePath,
-              ));
+              _addSingleIngredientToInventory(
+                ScannedIngredient(
+                  name: ingredientName,
+                  confidence: confidence,
+                  imagePath: imagePath,
+                ),
+              );
             },
             child: const Text('Add to Inventory'),
           ),
@@ -336,7 +345,9 @@ class _CameraScanScreenState extends State<CameraScanScreen> {
                     ingredient.name,
                     style: TextStyle(
                       fontWeight: FontWeight.w500,
-                      decoration: ingredient.isEdited ? TextDecoration.underline : null,
+                      decoration: ingredient.isEdited
+                          ? TextDecoration.underline
+                          : null,
                     ),
                   ),
                   subtitle: Text(
@@ -350,17 +361,19 @@ class _CameraScanScreenState extends State<CameraScanScreen> {
                     children: [
                       IconButton(
                         icon: const Icon(Icons.edit, size: 20),
-                        onPressed: () => _showEditIngredientDialog(
-                          ingredient,
-                          (edited) {
-                            setState(() {
-                              _scannedIngredients[index] = edited;
-                            });
-                          },
-                        ),
+                        onPressed: () =>
+                            _showEditIngredientDialog(ingredient, (edited) {
+                              setState(() {
+                                _scannedIngredients[index] = edited;
+                              });
+                            }),
                       ),
                       IconButton(
-                        icon: const Icon(Icons.delete, size: 20, color: Colors.red),
+                        icon: const Icon(
+                          Icons.delete,
+                          size: 20,
+                          color: Colors.red,
+                        ),
                         onPressed: () {
                           setState(() {
                             _scannedIngredients.removeAt(index);
@@ -391,9 +404,14 @@ class _CameraScanScreenState extends State<CameraScanScreen> {
     );
   }
 
-  void _showEditIngredientDialog(ScannedIngredient ingredient, Function(ScannedIngredient) onSave) {
-    final TextEditingController nameController = TextEditingController(text: ingredient.name);
-    
+  void _showEditIngredientDialog(
+    ScannedIngredient ingredient,
+    Function(ScannedIngredient) onSave,
+  ) {
+    final TextEditingController nameController = TextEditingController(
+      text: ingredient.name,
+    );
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -451,7 +469,9 @@ class _CameraScanScreenState extends State<CameraScanScreen> {
     );
   }
 
-  Future<void> _addSingleIngredientToInventory(ScannedIngredient scannedIngredient) async {
+  Future<void> _addSingleIngredientToInventory(
+    ScannedIngredient scannedIngredient,
+  ) async {
     try {
       final ingredient = Ingredient(
         name: scannedIngredient.name,
@@ -460,9 +480,11 @@ class _CameraScanScreenState extends State<CameraScanScreen> {
         expiry: _estimateExpiryForIngredient(scannedIngredient.name),
         costAud: null, // No cost for fresh produce
       );
-      
+
       await InventoryStore().insert(ingredient);
-      
+      // Notify inventory UI to refresh
+      inventoryRefreshNotifier.value = inventoryRefreshNotifier.value + 1;
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -471,7 +493,7 @@ class _CameraScanScreenState extends State<CameraScanScreen> {
             duration: const Duration(seconds: 2),
           ),
         );
-        
+
         // Navigate back after successful addition
         Navigator.of(context).pop();
       }
@@ -490,7 +512,7 @@ class _CameraScanScreenState extends State<CameraScanScreen> {
   Future<void> _addAllIngredientsToInventory() async {
     try {
       int addedCount = 0;
-      
+
       for (final scannedIngredient in _scannedIngredients) {
         final ingredient = Ingredient(
           name: scannedIngredient.name,
@@ -499,11 +521,13 @@ class _CameraScanScreenState extends State<CameraScanScreen> {
           expiry: _estimateExpiryForIngredient(scannedIngredient.name),
           costAud: null, // No cost for fresh produce
         );
-        
+
         await InventoryStore().insert(ingredient);
         addedCount++;
       }
-      
+      // Notify inventory UI once after batch insert
+      inventoryRefreshNotifier.value = inventoryRefreshNotifier.value + 1;
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -512,7 +536,7 @@ class _CameraScanScreenState extends State<CameraScanScreen> {
             duration: const Duration(seconds: 3),
           ),
         );
-        
+
         // Clear scanned ingredients and navigate back
         setState(() {
           _scannedIngredients.clear();
@@ -533,23 +557,29 @@ class _CameraScanScreenState extends State<CameraScanScreen> {
 
   DateTime _estimateExpiryForIngredient(String ingredientName) {
     final lowerName = ingredientName.toLowerCase();
-    
-    if (lowerName.contains('lettuce') || lowerName.contains('spinach') || lowerName.contains('herbs')) {
+
+    if (lowerName.contains('lettuce') ||
+        lowerName.contains('spinach') ||
+        lowerName.contains('herbs')) {
       return DateTime.now().add(const Duration(days: 3)); // Leafy greens
-    } else if (lowerName.contains('apple') || lowerName.contains('orange') || lowerName.contains('banana')) {
+    } else if (lowerName.contains('apple') ||
+        lowerName.contains('orange') ||
+        lowerName.contains('banana')) {
       return DateTime.now().add(const Duration(days: 7)); // Fruits
-    } else if (lowerName.contains('carrot') || lowerName.contains('potato') || lowerName.contains('onion')) {
+    } else if (lowerName.contains('carrot') ||
+        lowerName.contains('potato') ||
+        lowerName.contains('onion')) {
       return DateTime.now().add(const Duration(days: 14)); // Root vegetables
     } else if (lowerName.contains('tomato') || lowerName.contains('pepper')) {
       return DateTime.now().add(const Duration(days: 5)); // Fresh vegetables
     }
-    
+
     return DateTime.now().add(const Duration(days: 7)); // Default
   }
 
   double _estimateWeightForIngredient(String ingredientName) {
     final lowerName = ingredientName.toLowerCase();
-    
+
     if (lowerName.contains('apple') || lowerName.contains('orange')) {
       return 0.2; // ~200g per fruit
     } else if (lowerName.contains('banana')) {
@@ -559,7 +589,7 @@ class _CameraScanScreenState extends State<CameraScanScreen> {
     } else if (lowerName.contains('carrot')) {
       return 0.1; // ~100g per carrot
     }
-    
+
     return 0.2; // Default 200g
   }
 
@@ -613,36 +643,44 @@ class _CameraScanScreenState extends State<CameraScanScreen> {
                       Container(
                         width: double.infinity,
                         padding: const EdgeInsets.symmetric(vertical: 8),
-                        color: _isMultiMode ? Colors.orange.shade100 : Colors.blue.shade100,
+                        color: _isMultiMode
+                            ? Colors.orange.shade100
+                            : Colors.blue.shade100,
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Icon(
-                              _isMultiMode ? Icons.camera_alt : Icons.center_focus_strong,
-                              color: _isMultiMode ? Colors.orange.shade700 : Colors.blue.shade700,
+                              _isMultiMode
+                                  ? Icons.camera_alt
+                                  : Icons.center_focus_strong,
+                              color: _isMultiMode
+                                  ? Colors.orange.shade700
+                                  : Colors.blue.shade700,
                               size: 16,
                             ),
                             const SizedBox(width: 8),
                             Text(
-                              _isMultiMode 
+                              _isMultiMode
                                   ? 'Multi-Mode: ${_scannedIngredients.length} items scanned'
                                   : 'Single Mode',
                               style: TextStyle(
-                                color: _isMultiMode ? Colors.orange.shade700 : Colors.blue.shade700,
+                                color: _isMultiMode
+                                    ? Colors.orange.shade700
+                                    : Colors.blue.shade700,
                                 fontWeight: FontWeight.w500,
                               ),
                             ),
                           ],
                         ),
                       ),
-                      
+
                       // Camera preview
                       Expanded(
                         flex: 3,
                         child: Stack(
                           children: [
                             CameraPreview(_controller!),
-                            
+
                             // Multi-mode results button
                             if (_isMultiMode && _scannedIngredients.isNotEmpty)
                               Positioned(
@@ -700,8 +738,10 @@ class _CameraScanScreenState extends State<CameraScanScreen> {
                           children: [
                             Expanded(
                               child: ElevatedButton.icon(
-                                onPressed: _isProcessing ? null : _captureAndPredict,
-                                icon: _isProcessing 
+                                onPressed: _isProcessing
+                                    ? null
+                                    : _captureAndPredict,
+                                icon: _isProcessing
                                     ? const SizedBox(
                                         width: 16,
                                         height: 16,
@@ -711,21 +751,24 @@ class _CameraScanScreenState extends State<CameraScanScreen> {
                                         ),
                                       )
                                     : const Icon(Icons.camera_alt),
-                                label: Text(_isProcessing 
-                                    ? 'Processing...' 
-                                    : 'Capture & Predict'),
+                                label: Text(
+                                  _isProcessing
+                                      ? 'Processing...'
+                                      : 'Capture & Predict',
+                                ),
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: _isMultiMode 
-                                      ? Colors.orange.shade700 
+                                  backgroundColor: _isMultiMode
+                                      ? Colors.orange.shade700
                                       : Colors.teal.shade700,
                                   foregroundColor: Colors.white,
                                   minimumSize: const Size.fromHeight(48),
                                 ),
                               ),
                             ),
-                            
+
                             // Multi-mode results button (alternative placement)
-                            if (_isMultiMode && _scannedIngredients.isNotEmpty) ...[
+                            if (_isMultiMode &&
+                                _scannedIngredients.isNotEmpty) ...[
                               const SizedBox(width: 8),
                               ElevatedButton.icon(
                                 onPressed: _showMultiModeResults,
