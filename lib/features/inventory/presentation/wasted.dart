@@ -4,6 +4,7 @@ import '../../../common/services/app_events.dart';
 import '../../../common/db/collections/wasted_store.dart';
 import '../../../common/db/models/wasted_item.dart';
 import '../../../common/db/collections/inventory_store.dart';
+import 'inventory.dart';
 // import '../../../common/db/models/wasted_item_extension.dart'; // toIngredient()
 import '../../wasted/presentation/waste_log_form.dart';
 import 'waste_charts_screen.dart';
@@ -159,6 +160,7 @@ class _WastedItemsPageState extends State<WastedItemsPage> {
     // 3) Refresh this screen & notify inventory screen to reload
     if (!mounted) return;
     await _reloadAll();
+    inventoryRefreshNotifier.value = inventoryRefreshNotifier.value + 1;
     AppEvents.instance.requestReloadAll();
 
     ScaffoldMessenger.of(
@@ -178,6 +180,7 @@ class _WastedItemsPageState extends State<WastedItemsPage> {
       // 3) Refresh this screen & notify inventory screen to reload
       if (!mounted) return;
       await _reloadAll();
+      inventoryRefreshNotifier.value = inventoryRefreshNotifier.value + 1;
       AppEvents.instance.requestReloadAll();
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -294,7 +297,10 @@ class _WastedItemsPageState extends State<WastedItemsPage> {
                         icon: const Icon(Icons.insights_outlined),
                         label: const Text('Charts'),
                         style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 4,
+                          ),
                           minimumSize: Size.zero,
                           textStyle: const TextStyle(fontSize: 12),
                         ),
